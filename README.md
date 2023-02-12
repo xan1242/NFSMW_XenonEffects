@@ -32,6 +32,8 @@ This feature was famously not included in the PC version of NFS Most Wanted and 
 
 - Particle bouncing seems broken (maybe it's an unused parameter in MW)
 
+- Switching to/from exclusive fullscreen mode
+
 ## Usage
 
 - Extract NFSMW_XenonEffect.asi and .ini to the scripts folder
