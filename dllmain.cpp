@@ -111,6 +111,14 @@ struct bVector4
     float w;
 };
 
+struct bMatrix4
+{
+    bVector4 v0;
+    bVector4 v1;
+    bVector4 v2;
+    bVector4 v3;
+};
+
 struct fuelcell_emitter_mw
 {
     bVector4 VolumeCenter;
@@ -706,6 +714,8 @@ loc_754DA5:                             ; CODE XREF: AddXenonEffect(AcidEffect *
                 retn
 	}
 }
+
+void(__cdecl* AddXenonEffect_Abstract)(void* piggyback_fx, void* spec, bMatrix4* mat, bVector4* vel, float intensity) = (void(__cdecl*)(void*, void*, bMatrix4*, bVector4*, float)) & AddXenonEffect;
 
 void __declspec(naked) CalcCollisiontime()
 {
@@ -1692,16 +1702,24 @@ void __declspec(naked) CGEmitter_CGEmitter()
     }
 }
 
+
+char fuelcell_attrib_buffer3[20];
 void __stdcall Attrib_Gen_fuelcell_effect_constructor(void* collection, unsigned int msgPort)
 {
     uint32_t that;
     _asm mov that, ecx
     //_asm int 3
 
-    Attrib_Instance_MW((void*)that, collection, msgPort, NULL);
+    memset(fuelcell_attrib_buffer3, 0, 20);
 
-    if (!*(uint32_t*)(that + 8))
-        *(uint32_t*)(that + 8) = (uint32_t)Attrib_DefaultDataArea(1);
+    Attrib_Instance_MW((void*)fuelcell_attrib_buffer3, collection, msgPort, NULL);
+
+    memcpy((void*)that, (void*)(&fuelcell_attrib_buffer3[4]), 16);
+
+    //Attrib_Instance_MW((void*)that, collection, msgPort, NULL);
+
+    if (!*(uint32_t*)(that + 4))
+        *(uint32_t*)(that + 4) = (uint32_t)Attrib_DefaultDataArea(1);
 }
 
 unsigned int __stdcall Attrib_Gen_fuelcell_effect_Num_NGEmitter()
@@ -1714,7 +1732,7 @@ unsigned int __stdcall Attrib_Gen_fuelcell_effect_Num_NGEmitter()
     char v4[16]; // [esp+4h] [ebp-1Ch] BYREF
     int v5; // [esp+1Ch] [ebp-4h]
 
-    v1 = (uint32_t)Attrib_Instance_Get((void*)that, (unsigned int)v4, 0xB0D98A89);
+    v1 = (uint32_t)Attrib_Instance_Get((void*)(that - 4), (unsigned int)v4, 0xB0D98A89);
     v5 = 0;
     v2 = (uint32_t)Attrib_Attribute_GetLength((void*)v1);
     v5 = -1;
@@ -1757,6 +1775,7 @@ loc_74A2C0:                             ; CODE XREF: NGEffect::NGEffect(XenonEff
                 push    esi
                 push    0B0D98A89h
                 mov     ecx, ebp
+                sub ecx, 4
                 call    Attrib_Instance_GetAttributePointer
                 test    eax, eax
                 jnz     loc_74A2DB
@@ -1776,11 +1795,12 @@ loc_74A2DB:                             ; CODE XREF: NGEffect::NGEffect(XenonEff
                 mov     eax, [edi+58h]
                 test    eax, eax
                 mov     byte ptr [esp+8Ch], 1
-                jnz     loc_74A30B
+                jnz     loc_74A30B // jnz
                 mov     ecx, [edi]
                 mov     edx, [esp+98h]
                 push    1
                 push    ecx
+                //push    3F800000h
                 push    edx
                 jmp     loc_74A31A
 ; ---------------------------------------------------------------------------
@@ -2403,6 +2423,23 @@ void __declspec(naked) Emitter_SpawnParticles_Cave()
     }
 }
 
+void AddXenonEffect_Hook(void* piggyback_fx, void* spec, bMatrix4* mat, bVector4* vel, float intensity)
+{
+    //printf("x: %.2f\ty: %.2f\tz: %.2f\tw: %.2f\n", (*vel).x, (*vel).y, (*vel).z, (*vel).w);
+    
+    printf("\
+x0: %.2f\ty0: %.2f\tz0: %.2f\tw0: %.2f\n\
+x1: %.2f\ty1: %.2f\tz1: %.2f\tw1: %.2f\n\
+x2: %.2f\ty2: %.2f\tz2: %.2f\tw2: %.2f\n\
+x3: %.2f\ty3: %.2f\tz3: %.2f\tw3: %.2f\n",
+(*mat).v0.x, (*mat).v0.y, (*mat).v0.z, (*mat).v0.w,
+(*mat).v1.x, (*mat).v1.y, (*mat).v1.z, (*mat).v1.w, 
+(*mat).v2.x, (*mat).v2.y, (*mat).v2.z, (*mat).v2.w, 
+(*mat).v3.x, (*mat).v3.y, (*mat).v3.z, (*mat).v3.w);
+
+    AddXenonEffect_Abstract(piggyback_fx, spec, mat, vel, intensity);
+}
+
 // entry point: 0x750F48
 // exit points: 0x750F6D & 0x750F4E
 
@@ -2596,8 +2633,8 @@ int Init()
     injector::WriteMemory<uint32_t>(0x0075E6FC, 0x408, true);
     injector::WriteMemory<uint32_t>(0x0075E766, 0x408, true);
 
-    //freopen("CON", "w", stdout);
-    //freopen("CON", "w", stderr);
+    freopen("CON", "w", stdout);
+    freopen("CON", "w", stderr);
 
 	return 0;
 }
