@@ -170,6 +170,14 @@ struct fuelcell_emitter_carbon
     uint8_t zContrail;
 }bridge_instance;
 
+struct emitteruv_layoutstruct
+{
+    float EndV;
+    float StartU;
+    float EndU;
+    float StartV;
+}fx_stripe_uv = {1.0f, 0.75f, 1.0f, 0.75f}; // spark UV override for the emitteruv collection 0xCCF51B5C
+
 
 int NGSpriteManager[32];
 char NGSpriteManager_ClassData[128];
@@ -1062,6 +1070,18 @@ loc_74A24F:                             ; CODE XREF: ParticleList::AgeParticles(
     }
 }
 
+char fuelcell_attrib_buffer5[20];
+void* __stdcall Attrib_Instance_GetAttributePointer_Shim(uint32_t hash, uint32_t unk)
+{
+    uint32_t that;
+    _asm mov that, ecx
+
+    memset(fuelcell_attrib_buffer5, 0, 20);
+    memcpy(&(fuelcell_attrib_buffer5[4]), (void*)that, 16);
+
+    return Attrib_Instance_GetAttributePointer((void*)fuelcell_attrib_buffer5, hash, unk);
+}
+
 void __declspec(naked) CGEmitter_SpawnParticles()
 {
     _asm
@@ -1177,10 +1197,10 @@ loc_73F472:                             ; CODE XREF: CGEmitter::SpawnParticles(f
                 fmul    ds:flt_9C2C44
                 push    28638D89h
                 mov     ecx, ebp
-                sub ecx, 4
+                //sub ecx, 4
                 fsubp   st(1), st
                 fstp    dword ptr [esp+28h]
-                call    Attrib_Instance_GetAttributePointer; Attrib::Instance::GetAttributePointer(const(ulong,uint))
+                call    Attrib_Instance_GetAttributePointer_Shim; Attrib::Instance::GetAttributePointer(const(ulong,uint))
                 test    eax, eax
                 jnz     short loc_73F4A6
                 push    1
@@ -1192,9 +1212,9 @@ loc_73F4A6:                             ; CODE XREF: CGEmitter::SpawnParticles(f
                 push    0
                 push    0D2603865h
                 mov     ecx, ebp
-                sub ecx, 4
+                //sub ecx, 4
                 mov     [esp+22h], dl
-                call    Attrib_Instance_GetAttributePointer; Attrib::Instance::GetAttributePointer(const(ulong,uint))
+                call    Attrib_Instance_GetAttributePointer_Shim; Attrib::Instance::GetAttributePointer(const(ulong,uint))
                 test    eax, eax
                 jnz     short loc_73F4C8
                 push    1
@@ -1206,9 +1226,9 @@ loc_73F4C8:                             ; CODE XREF: CGEmitter::SpawnParticles(f
                 push    0
                 push    0E2CC8106h
                 mov     ecx, ebp
-                sub ecx, 4
+                //sub ecx, 4
                 mov     [esp+21h], al
-                call    Attrib_Instance_GetAttributePointer ; Attrib::Instance::GetAttributePointer(const(ulong,uint))
+                call    Attrib_Instance_GetAttributePointer_Shim; Attrib::Instance::GetAttributePointer(const(ulong,uint))
                 test    eax, eax
                 jnz     short loc_73F4EA
                 push    1
@@ -1443,11 +1463,11 @@ loc_73F5CF:                             ; CODE XREF: CGEmitter::SpawnParticles(f
                 mov     al, [esp+24h]
                 mov     [esi+44h], al
                 mov     ecx, [ebp+14h]
-                fld     dword ptr [ecx+4]
+                fld     dword ptr [ecx+4] // emitteruv StartU
                 call    __ftol2
                 mov     [esi+45h], al
                 mov     edx, [ebp+14h]
-                fld     dword ptr [edx+0Ch]
+                fld     dword ptr [edx+0Ch] // emitteruv StartV
                 call    __ftol2
                 mov     [esi+46h], al
                 lea     eax, [esp+10h]
@@ -1477,22 +1497,22 @@ loc_73F5CF:                             ; CODE XREF: CGEmitter::SpawnParticles(f
 
 loc_73F87A:                             ; CODE XREF: CGEmitter::SpawnParticles(float,float)+4E5↑j
                 mov     eax, [ebp+14h]
-                fld     dword ptr [eax+4]
+                fld     dword ptr [eax+4] // emitteruv StartU
                 fmul    ds:flt_9C92F0
                 call    __ftol2
                 mov     [esi+44h], al
                 mov     ecx, [ebp+14h]
-                fld     dword ptr [ecx+0Ch]
+                fld     dword ptr [ecx+0Ch] // emitteruv StartV
                 fmul    ds:flt_9C92F0
                 call    __ftol2
                 mov     [esi+45h], al
                 mov     edx, [ebp+14h]
-                fld     dword ptr [edx+8]
+                fld     dword ptr [edx+8] // emitteruv EndU
                 fmul    ds:flt_9C92F0
                 call    __ftol2
                 mov     [esi+46h], al
                 mov     eax, [ebp+14h]
-                fld     dword ptr [eax]
+                fld     dword ptr [eax] // emitteruv EndV
                 fmul    ds:flt_9C92F0
                 call    __ftol2
                 fld     dword ptr [esp+1Ch]
@@ -1633,15 +1653,25 @@ loc_73765A:                             ; CODE XREF: sub_737610+3B↑j
                 retn    8
     }
 }
+
 char fuelcell_attrib_buffer2[20];
+
 void* (__thiscall* sub_737610_Abstract)(void* AttribInstance, uint32_t unk1, uint32_t unk2) = (void* (__thiscall*)(void*, uint32_t, uint32_t)) & sub_737610;
 void* __stdcall sub_737610_shim(uint32_t unk1, uint32_t unk2)
 {
     uint32_t that;
     _asm mov that, ecx
 
+    uint32_t CollectionKey = *(uint32_t*)(unk1 + 4);
+
     memset(fuelcell_attrib_buffer2, 0, 20);
     auto result = sub_737610_Abstract((void*)fuelcell_attrib_buffer2, unk1, unk2);
+
+    if (CollectionKey == 0xCCF51B5C)
+    {
+        void* overrideptr = *(void**)(&fuelcell_attrib_buffer2[8]);
+        memcpy(overrideptr, &fx_stripe_uv, sizeof(emitteruv_layoutstruct));
+    }
 
     memcpy((void*)that, (void*)(&fuelcell_attrib_buffer2[4]), 16);
 
@@ -1730,15 +1760,33 @@ unsigned int __stdcall Attrib_Gen_fuelcell_effect_Num_NGEmitter()
     uint32_t v1; // eax
     uint32_t v2; // esi
     char v4[16]; // [esp+4h] [ebp-1Ch] BYREF
-    int v5; // [esp+1Ch] [ebp-4h]
+    //int v5; // [esp+1Ch] [ebp-4h]
 
-    v1 = (uint32_t)Attrib_Instance_Get((void*)(that - 4), (unsigned int)v4, 0xB0D98A89);
-    v5 = 0;
+    memset(fuelcell_attrib_buffer3, 0, 20);
+    memcpy(&(fuelcell_attrib_buffer3[4]), (void*)that, 16);
+
+    v1 = (uint32_t)Attrib_Instance_Get(fuelcell_attrib_buffer3, (unsigned int)v4, 0xB0D98A89);
+    //v5 = 0;
     v2 = (uint32_t)Attrib_Attribute_GetLength((void*)v1);
-    v5 = -1;
+    //v5 = -1;
 
     return v2;
 }
+
+// copies the object to a secondary buffer and then executes the destructor
+// done to protect the memory area around the stack and avoid corruption
+char fuelcell_attrib_buffer4[20];
+void __stdcall Attrib_Instance_Dtor_Shim()
+{
+    uint32_t that;
+    _asm mov that, ecx
+
+    memset(fuelcell_attrib_buffer4, 0, 20);
+    memcpy(&(fuelcell_attrib_buffer4[4]), (void*)that, 16);
+
+    Attrib_Instance_Dtor((void*)fuelcell_attrib_buffer4);
+}
+
 
 void __declspec(naked) NGEffect_NGEffect()
 {
@@ -1775,8 +1823,8 @@ loc_74A2C0:                             ; CODE XREF: NGEffect::NGEffect(XenonEff
                 push    esi
                 push    0B0D98A89h
                 mov     ecx, ebp
-                sub ecx, 4
-                call    Attrib_Instance_GetAttributePointer
+                //sub ecx, 4
+                call    Attrib_Instance_GetAttributePointer_Shim
                 test    eax, eax
                 jnz     loc_74A2DB
                 push    0Ch
@@ -1820,12 +1868,12 @@ loc_74A31A:                             ; CODE XREF: NGEffect::NGEffect(XenonEff
                 call fuelcell_emitter_bridge_restore
                 lea     ecx, [esp+24h]
                 mov     byte ptr [esp+8Ch], 2
-                sub ecx, 4
-                call    Attrib_Instance_Dtor ; Attrib::Instance::~Instance((void))
+                //sub ecx, 4
+                call    Attrib_Instance_Dtor_Shim; Attrib::Instance::~Instance((void))
                 lea     ecx, [esp+14h]
                 mov     byte ptr [esp+8Ch], 0
-                sub ecx, 4
-                call    Attrib_Instance_Dtor; Attrib::Instance::~Instance((void))
+                //sub ecx, 4
+                call    Attrib_Instance_Dtor_Shim; Attrib::Instance::~Instance((void))
                 mov     eax, [esp+0Ch]
                 inc     esi
                 cmp     esi, eax
@@ -2599,6 +2647,12 @@ void InitConfig()
     CIniReader inireader("");
     bDebugTexture = inireader.ReadInteger("MAIN", "DebugTexture", 0) != 0;
     bContrails = inireader.ReadInteger("MAIN", "Contrails", 0) != 0;
+
+    fx_stripe_uv.StartU = inireader.ReadFloat("SparkUV", "StartU", 0.75f);
+    fx_stripe_uv.StartV = inireader.ReadFloat("SparkUV", "StartV", 0.75f);
+    fx_stripe_uv.EndU = inireader.ReadFloat("SparkUV", "EndU", 1.0f);
+    fx_stripe_uv.EndV = inireader.ReadFloat("SparkUV", "EndV", 1.0f);
+
 }
 
 int Init()
@@ -2633,8 +2687,8 @@ int Init()
     injector::WriteMemory<uint32_t>(0x0075E6FC, 0x408, true);
     injector::WriteMemory<uint32_t>(0x0075E766, 0x408, true);
 
-    freopen("CON", "w", stdout);
-    freopen("CON", "w", stderr);
+    //freopen("CON", "w", stdout);
+    //freopen("CON", "w", stderr);
 
 	return 0;
 }
