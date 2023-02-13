@@ -1657,6 +1657,7 @@ loc_73765A:                             ; CODE XREF: sub_737610+3B↑j
 char fuelcell_attrib_buffer2[20];
 
 void* (__thiscall* sub_737610_Abstract)(void* AttribInstance, uint32_t unk1, uint32_t unk2) = (void* (__thiscall*)(void*, uint32_t, uint32_t)) & sub_737610;
+#pragma optimize("", off)
 void* __stdcall sub_737610_shim(uint32_t unk1, uint32_t unk2)
 {
     uint32_t that;
@@ -1677,7 +1678,7 @@ void* __stdcall sub_737610_shim(uint32_t unk1, uint32_t unk2)
 
     return result;
 }
-
+#pragma optimize("", on)
 
 void __declspec(naked) CGEmitter_CGEmitter()
 {
