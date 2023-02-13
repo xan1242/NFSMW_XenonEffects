@@ -170,15 +170,6 @@ struct fuelcell_emitter_carbon
     uint8_t zContrail;
 }bridge_instance;
 
-struct emitteruv_layoutstruct
-{
-    float EndV;
-    float StartU;
-    float EndU;
-    float StartV;
-}fx_stripe_uv = {1.0f, 0.75f, 1.0f, 0.75f}; // spark UV override for the emitteruv collection 0xCCF51B5C
-
-
 int NGSpriteManager[32];
 char NGSpriteManager_ClassData[128];
 
@@ -1657,28 +1648,18 @@ loc_73765A:                             ; CODE XREF: sub_737610+3B↑j
 char fuelcell_attrib_buffer2[20];
 
 void* (__thiscall* sub_737610_Abstract)(void* AttribInstance, uint32_t unk1, uint32_t unk2) = (void* (__thiscall*)(void*, uint32_t, uint32_t)) & sub_737610;
-#pragma optimize("", off)
 void* __stdcall sub_737610_shim(uint32_t unk1, uint32_t unk2)
 {
     uint32_t that;
     _asm mov that, ecx
 
-    uint32_t CollectionKey = *(uint32_t*)(unk1 + 4);
-
     memset(fuelcell_attrib_buffer2, 0, 20);
     auto result = sub_737610_Abstract((void*)fuelcell_attrib_buffer2, unk1, unk2);
-
-    if (CollectionKey == 0xCCF51B5C)
-    {
-        void* overrideptr = *(void**)(&fuelcell_attrib_buffer2[8]);
-        memcpy(overrideptr, &fx_stripe_uv, sizeof(emitteruv_layoutstruct));
-    }
 
     memcpy((void*)that, (void*)(&fuelcell_attrib_buffer2[4]), 16);
 
     return result;
 }
-#pragma optimize("", on)
 
 void __declspec(naked) CGEmitter_CGEmitter()
 {
@@ -2668,12 +2649,6 @@ void InitConfig()
     CIniReader inireader("");
     bDebugTexture = inireader.ReadInteger("MAIN", "DebugTexture", 0) != 0;
     bContrails = inireader.ReadInteger("MAIN", "Contrails", 0) != 0;
-
-    fx_stripe_uv.StartU = inireader.ReadFloat("SparkUV", "StartU", 0.75f);
-    fx_stripe_uv.StartV = inireader.ReadFloat("SparkUV", "StartV", 0.75f);
-    fx_stripe_uv.EndU = inireader.ReadFloat("SparkUV", "EndU", 1.0f);
-    fx_stripe_uv.EndV = inireader.ReadFloat("SparkUV", "EndV", 1.0f);
-
 }
 
 int Init()
