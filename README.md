@@ -32,7 +32,7 @@ This feature was famously not included in the PC version of NFS Most Wanted and 
 
 - Particle bouncing seems broken (maybe it's an unused parameter in MW)
 
-- Switching to/from exclusive fullscreen mode
+- Switching to/from exclusive fullscreen mode (D3D device resetting)
 
 ## Usage
 
