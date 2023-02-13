@@ -2389,6 +2389,9 @@ void __stdcall XSpriteManager_DrawBatch(/*int unk*/)
         // this is a temporary hack until the real texture is loaded into memory
         g_D3DDevice->SetTexture(0, texMain);
 
+        g_D3DDevice->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_SRCALPHA);
+        g_D3DDevice->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_ONE);
+
         g_D3DDevice->DrawIndexedPrimitive(D3DPT_TRIANGLELIST, 0, 0, 4 * (*sm).vert_count, 0, 2 * (*sm).vert_count);
     }
 
@@ -2697,7 +2700,7 @@ int Init()
 
     // xenon effect inject at CarRenderConn::OnRender for contrails
     if (bContrails)
-        injector::MakeJMP(0x750F48, CarRenderConn_OnRender_Cave, true); // CAUSES DEBUG CAM TO CRASH THE GAME ATM
+      injector::MakeJMP(0x750F48, CarRenderConn_OnRender_Cave, true); // ExOpts was the cause of the Debug Cam crash due to an ancient workaround.
 
     // update contrail inject
     injector::MakeCALL(0x00756629, CarRenderConn_UpdateEngineAnimation_Hook, true);
