@@ -16,7 +16,7 @@ This feature was famously not included in the PC version of NFS Most Wanted and 
 
 - General rendering - implemented via DrawIndexedPrimitive
 
-- Sparks work, but UV maps randomly break, causing black stripes to appear
+- Sparks work
 
 - Contrail status updating in CarRenderConn
 
@@ -26,13 +26,13 @@ This feature was famously not included in the PC version of NFS Most Wanted and 
 
 - Contrail transformation - they do not get transformed correctly, causing them to randomly appear below the car under certain camera angles
 
-- Debug camera crashes the game while the contrail hook is enabled
+- ~~Debug camera crashes the game while the contrail hook is enabled~~ ExOpts was the culprit and will be patched in the latest build!
 
 - Proper texture loading from TextureInfo - currently the texture is loaded outside
 
 - Particle bouncing seems broken (maybe it's an unused parameter in MW)
 
-- Switching to/from exclusive fullscreen mode (D3D device resetting)
+- General game instability after playing for a while
 
 ## Usage
 
