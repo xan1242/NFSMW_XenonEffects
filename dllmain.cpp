@@ -43,7 +43,7 @@ void(__stdcall* sub_7286D0)() = (void(__stdcall*)())0x007286D0;
 void* (__cdecl* FastMem_CoreAlloc)(uint32_t size, char* debug_line) = (void* (__cdecl*)(uint32_t, char*))0x00465A70;
 void(__stdcall* sub_739600)() = (void(__stdcall*)())0x739600;
 void(__thiscall* CarRenderConn_UpdateEngineAnimation)(void* CarRenderConn, float param1, void* PktCarService) = (void(__thiscall*)(void*, float, void*))0x00745F20;
-
+void(__stdcall* sub_6CFCE0)() = (void(__stdcall*)())0x6CFCE0;
 
 void InitTex();
 
@@ -2316,10 +2316,20 @@ void InitTex()
         D3DXCreateTextureFromFile(g_D3DDevice, "scripts\\MAIN.dds", &texMain);
 }
 
+struct SpriteManager
+{
+    IDirect3DVertexBuffer9* vertex_buffer;
+    IDirect3DIndexBuffer9* index_buffer;
+    uint32_t unk1;
+    uint32_t unk2;
+    uint32_t vert_count;
+};
+
 void __declspec(naked) InitializeRenderObj()
 {
     _asm
     {
+        sub esp, 4
         push    ecx
         lea     eax, [esp]
         push    eax
@@ -2338,19 +2348,19 @@ void __declspec(naked) InitializeRenderObj()
         mov     [ecx], eax
         mov ecx, ds:[GLOBAL_D3DDEVICE]
         mov g_D3DDevice, ecx
-        add     esp, 10h
-        retn 8
+        xor al, al
+        add     esp, 14h
+        retn
     }
 }
 
-struct SpriteManager
+void __stdcall ReleaseRenderObj()
 {
-    IDirect3DVertexBuffer9* vertex_buffer;
-    IDirect3DIndexBuffer9* index_buffer;
-    uint32_t unk1;
-    uint32_t unk2;
-    uint32_t vert_count;
-};
+    SpriteManager* sm = (SpriteManager*)NGSpriteManager_ClassData;
+
+    (*sm).vertex_buffer->Release();
+    (*sm).index_buffer->Release();
+}
 
 void __stdcall XSpriteManager_DrawBatch(/*int unk*/)
 {
@@ -2396,6 +2406,13 @@ void __stdcall EmitterSystem_Render_Hook(void* eView)
     XSpriteManager_DrawBatch();
 
     //printf("VertexBuffer: 0x%X\n", vertex_buffer);
+}
+
+// D3D Reset Hook
+void __stdcall sub_6CFCE0_hook()
+{
+    sub_6CFCE0();
+    InitializeRenderObj();
 }
 
 // RENDERER STUFF END
@@ -2663,8 +2680,14 @@ int Init()
     // delta time stealer
     injector::MakeCALL(0x0050D43C, EmitterSystem_Update_Hook, true);
 
-    // temp. injection point in InitializeEverything()
-    injector::MakeCALL(0x006660D1, InitializeRenderObj, true);
+    // temp. injection point in LoadGlobalChunks()
+    injector::MakeCALL(0x006648BC, InitializeRenderObj, true);
+
+    // render objects release
+    injector::MakeCALL(0x006BD622, ReleaseRenderObj, true);
+
+    // D3D reset inject
+    injector::MakeCALL(0x006DB293, sub_6CFCE0_hook, true);
 
     // render inject, should be hooked to EmitterSystem::Render or somewhere after it
     injector::MakeCALL(0x006DF4BB, EmitterSystem_Render_Hook, true);
