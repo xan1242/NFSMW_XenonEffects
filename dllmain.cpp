@@ -1755,8 +1755,7 @@ unsigned int __stdcall Attrib_Gen_fuelcell_effect_Num_NGEmitter()
     return v2;
 }
 
-// copies the object to a secondary buffer and then executes the destructor
-// done to protect the memory area around the stack and avoid corruption
+// copies the object back to MW's format to avoid crashing during Attrib garbage collection
 char fuelcell_attrib_buffer4[20];
 void __stdcall Attrib_Instance_Dtor_Shim()
 {
@@ -1765,8 +1764,9 @@ void __stdcall Attrib_Instance_Dtor_Shim()
 
     memset(fuelcell_attrib_buffer4, 0, 20);
     memcpy(&(fuelcell_attrib_buffer4[4]), (void*)that, 16);
+    memcpy((void*)that, fuelcell_attrib_buffer4, 20);
 
-    Attrib_Instance_Dtor((void*)fuelcell_attrib_buffer4);
+    Attrib_Instance_Dtor((void*)that);
 }
 
 
@@ -2134,7 +2134,7 @@ void __declspec(naked) DrawXenonEmitters(void* eView)
         lea     ecx, [esp + 18h]
         call    NGEffect_NGEffect
         lea     ecx, [esp + 10h]
-        call    Attrib_Instance_Dtor
+        call    Attrib_Instance_Dtor_Shim
         mov     edx, dword ptr gNGEffectList[4]
 
         loc_754C71:
