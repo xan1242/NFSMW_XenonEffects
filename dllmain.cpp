@@ -22,6 +22,8 @@ bool bContrails = false;
 #define GAMEFLOWSTATUS_ADDR 0x00925E90
 
 #define MAX_PARTICLES 2000
+#define NGEFFECT_LIST_COUNT 100
+
 #define SIZEOF_NGPARTICLE 0x48
 #define PARTICLELIST_SIZE SIZEOF_NGPARTICLE * MAX_PARTICLES
 
@@ -618,7 +620,7 @@ void(__thiscall* eastl_vector_erase_XenonEffectDef_Abstract)(void* vector, void*
 
 void __stdcall XenonEffectList_Initialize()
 {
-    eastl_vector_reserve_XenonEffectDef_Abstract(&gNGEffectList, 100);
+    eastl_vector_reserve_XenonEffectDef_Abstract(&gNGEffectList, NGEFFECT_LIST_COUNT);
     //eastl_vector_erase_XenonEffectDef_Abstract(&gNGEffectList, gNGEffectList, (void*)((uint32_t)(gNGEffectList + 4)));
 }
 
