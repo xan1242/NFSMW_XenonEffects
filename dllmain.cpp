@@ -19,6 +19,11 @@ bool bDebugTexture = false;
 bool bContrails = false;
 
 #define GLOBAL_D3DDEVICE 0x00982BDC
+#define GAMEFLOWSTATUS_ADDR 0x00925E90
+
+#define MAX_PARTICLES 2000
+#define SIZEOF_NGPARTICLE 0x48
+#define PARTICLELIST_SIZE SIZEOF_NGPARTICLE * MAX_PARTICLES
 
 void*(__thiscall* FastMem_Alloc)(void* FastMem, unsigned int bytes, char* kind) = (void*(__thiscall*)(void*, unsigned int, char*))0x005D29D0;
 void* (__thiscall* FastMem_Free)(void* FastMem, void* ptr, unsigned int bytes, char* kind) = (void* (__thiscall*)(void*, void*, unsigned int, char*))0x005D0370;
@@ -76,11 +81,11 @@ unsigned int sub_4013F0 = 0x005C5E90;
 char gNGEffectList[64];
 
 
-char gParticleList[0x23284];
+char gParticleList[PARTICLELIST_SIZE + 4];
 void* off_468094 = NULL;
 bool byte_468098 = false;
 
-#define numParticles dword ptr gParticleList[0x23280]
+#define numParticles dword ptr gParticleList[PARTICLELIST_SIZE]
 
 float flt_9C92F0 = 255.0f;
 float flt_9C2478 = 1.0f;
@@ -979,8 +984,8 @@ void __declspec(naked) ParticleList_AgeParticles()
                 push    ebx
                 push    ebp
                 mov     ebp, ecx
-                mov     ecx, [ebp+23280h]
-                lea     edx, [ebp+23280h]
+                mov     ecx, [ebp+PARTICLELIST_SIZE]
+                lea     edx, [ebp+PARTICLELIST_SIZE]
                 xor     eax, eax
                 cmp     ecx, eax
                 mov     ebx, ebp
@@ -1254,7 +1259,7 @@ loc_73F50C:                             ; CODE XREF: CGEmitter::SpawnParticles(f
 loc_73F540:                             ; CODE XREF: CGEmitter::SpawnParticles(float,float)+5ED↓j
                 fld     dword ptr [esp+20h]
                 mov     eax, numParticles
-                cmp     eax, 7D0h
+                cmp     eax, MAX_PARTICLES
                 fsub    ds:flt_9C2478
                 fstp    dword ptr [esp+20h]
                 jnb     loc_73F913
@@ -2315,7 +2320,7 @@ void __declspec(naked) InitializeRenderObj()
         lea     eax, [esp]
         push    eax
         mov     ecx, offset NGSpriteManager_ClassData
-        mov     dword ptr[esp + 4], 0x7D0
+        mov     dword ptr[esp + 4], MAX_PARTICLES
         call    sub_743DF0
         push    0
         push    1
@@ -2355,6 +2360,8 @@ void __stdcall XSpriteManager_DrawBatch(/*int unk*/)
 
     // init shader stuff here...
 
+    //printf("vert_count: %d\nparticle_count: %d\n", (*sm).vert_count, *(uint32_t*)(&gParticleList[PARTICLELIST_SIZE]));
+
     if ((*sm).vert_count)
     {
         //g_D3DDevice->SetFVF((D3DFVF_XYZRHW | D3DFVF_DIFFUSE)); -- don't touch FVF
@@ -2385,10 +2392,11 @@ void __stdcall EmitterSystem_Render_Hook(void* eView)
     _asm mov that, ecx
 
     EmitterSystem_Render(that, eView);
-    DrawXenonEmitters(eView);
-
-    XSpriteManager_DrawBatch();
-
+    if (*(uint32_t*)GAMEFLOWSTATUS_ADDR == 6)
+    {
+        DrawXenonEmitters(eView);
+        XSpriteManager_DrawBatch();
+    }
     //printf("VertexBuffer: 0x%X\n", vertex_buffer);
 }
 
@@ -2477,17 +2485,19 @@ void AddXenonEffect_Hook(void* piggyback_fx, void* spec, bMatrix4* mat, bVector4
 {
     //printf("x: %.2f\ty: %.2f\tz: %.2f\tw: %.2f\n", (*vel).x, (*vel).y, (*vel).z, (*vel).w);
     
-    printf("\
-x0: %.2f\ty0: %.2f\tz0: %.2f\tw0: %.2f\n\
-x1: %.2f\ty1: %.2f\tz1: %.2f\tw1: %.2f\n\
-x2: %.2f\ty2: %.2f\tz2: %.2f\tw2: %.2f\n\
-x3: %.2f\ty3: %.2f\tz3: %.2f\tw3: %.2f\n",
-(*mat).v0.x, (*mat).v0.y, (*mat).v0.z, (*mat).v0.w,
-(*mat).v1.x, (*mat).v1.y, (*mat).v1.z, (*mat).v1.w, 
-(*mat).v2.x, (*mat).v2.y, (*mat).v2.z, (*mat).v2.w, 
-(*mat).v3.x, (*mat).v3.y, (*mat).v3.z, (*mat).v3.w);
+    bVector4 newvel = {-40.6f, 29.3f, -2.3f, 0.0f};
 
-    AddXenonEffect_Abstract(piggyback_fx, spec, mat, vel, intensity);
+    //printf("\
+//x0: %.2f\ty0: %.2f\tz0: %.2f\tw0: %.2f\n\
+//x1: %.2f\ty1: %.2f\tz1: %.2f\tw1: %.2f\n\
+//x2: %.2f\ty2: %.2f\tz2: %.2f\tw2: %.2f\n\
+//x3: %.2f\ty3: %.2f\tz3: %.2f\tw3: %.2f\n",
+//(*mat).v0.x, (*mat).v0.y, (*mat).v0.z, (*mat).v0.w,
+//(*mat).v1.x, (*mat).v1.y, (*mat).v1.z, (*mat).v1.w, 
+//(*mat).v2.x, (*mat).v2.y, (*mat).v2.z, (*mat).v2.w, 
+//(*mat).v3.x, (*mat).v3.y, (*mat).v3.z, (*mat).v3.w);
+
+    AddXenonEffect_Abstract(piggyback_fx, spec, mat, &newvel, intensity);
 }
 
 // entry point: 0x750F48
