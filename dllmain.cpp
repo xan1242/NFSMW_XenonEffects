@@ -9,14 +9,13 @@
 #include "..\includes\IniReader.h"
 #include <d3d9.h>
 #pragma comment(lib, "d3d9.lib")
-#pragma runtime_checks( "", off )
 
 #include <d3dx9.h>
 #pragma comment(lib, "d3dx9.lib")
 #pragma runtime_checks( "", off )
 
 bool bDebugTexture = false;
-bool bContrails = false;
+bool bContrails = true;
 
 #define GLOBAL_D3DDEVICE 0x00982BDC
 #define GAMEFLOWSTATUS_ADDR 0x00925E90
@@ -2136,7 +2135,7 @@ void __declspec(naked) XSpriteManager_AddParticle()
 
         loc_74EE0B:; CODE XREF : XSpriteManager::AddParticle(eView*, NGParticle const*, uint) + 23F↑j
         ; XSpriteManager::AddParticle(eView*, NGParticle const*, uint) + 245↑j
-            call CopyVertexData
+            //call CopyVertexData
         mov     eax, [ebp + 0]
         mov     ecx, [eax]
         push    eax
@@ -2367,6 +2366,22 @@ struct SpriteManager
     uint32_t vert_count;
 };
 
+
+struct eViewPlatInfo
+{
+    D3DXMATRIX ViewMatrix;
+    D3DXMATRIX ProjectionMatrix;
+    D3DXMATRIX m_mProjectionZBiasMatrix;
+    D3DXMATRIX m_mViewProjectionMatrix;
+    D3DXMATRIX m_mViewProjectionZBiasMatrix;
+};
+
+struct eView
+{
+    eViewPlatInfo* PlatInfo;
+};
+
+
 void __declspec(naked) InitializeRenderObj()
 {
     _asm
@@ -2404,7 +2419,7 @@ void __stdcall ReleaseRenderObj()
     (*sm).index_buffer->Release();
 }
 
-void __stdcall XSpriteManager_DrawBatch(void* eView)
+void __stdcall XSpriteManager_DrawBatch(eView* view)
 {
     //uint32_t SpriteMgrBuffer = (uint32_t)NGSpriteManager_ClassData;
     //uint32_t vert_count = *(uint32_t*)(SpriteMgrBuffer + 0x10);
@@ -2428,7 +2443,6 @@ void __stdcall XSpriteManager_DrawBatch(void* eView)
     //printf("eView: 0x%X\n", eView);
 
 
-
     //printf("flt_9C77C8: 0x%X\n", &flt_9C77C8);
 
     
@@ -2448,9 +2462,11 @@ void __stdcall XSpriteManager_DrawBatch(void* eView)
         // this is a temporary hack until the real texture is loaded into memory
         g_D3DDevice->SetTexture(0, texMain);
 
+        g_D3DDevice->SetTransform(D3DTS_VIEW, &view->PlatInfo->ViewMatrix);
+        g_D3DDevice->SetTransform(D3DTS_PROJECTION, &view->PlatInfo->ProjectionMatrix);
+
         g_D3DDevice->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_SRCALPHA);
         g_D3DDevice->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_ONE);
-        //g_D3DDevice->SetTransform()
 
         g_D3DDevice->DrawIndexedPrimitive(D3DPT_TRIANGLELIST, 0, 0, 4 * (*sm).vert_count, 0, 2 * (*sm).vert_count);
     }
@@ -2458,16 +2474,16 @@ void __stdcall XSpriteManager_DrawBatch(void* eView)
     g_D3DDevice->SetRenderState(D3DRS_ZWRITEENABLE, TRUE);
 }
 
-void __stdcall EmitterSystem_Render_Hook(void* eView)
+void __stdcall EmitterSystem_Render_Hook(eView* view)
 {
     void* that;
     _asm mov that, ecx
 
-    EmitterSystem_Render(that, eView);
+    EmitterSystem_Render(that, view);
     if (*(uint32_t*)GAMEFLOWSTATUS_ADDR == 6)
     {
-        DrawXenonEmitters(eView);
-        XSpriteManager_DrawBatch(eView);
+        DrawXenonEmitters(view);
+        XSpriteManager_DrawBatch(view);
     }
     //printf("VertexBuffer: 0x%X\n", vertex_buffer);
 }
@@ -2611,9 +2627,9 @@ void __declspec(naked) CarRenderConn_OnRender_Cave()
 {
     _asm
     {
-                //mov     al, [edi+400h]
-                //test    al, al
-                //jz      loc_7E13A5
+                mov     al, [edi+400h]
+                test    al, al
+                jz      loc_7E13A5
                 test    ebx, ebx
                 jz      loc_7E140C
                 mov     eax, [esi+8]
@@ -2695,7 +2711,7 @@ loc_7E1346:                             ; CODE XREF: sub_7E1160+169↑j
 loc_7E1397:                             ; CODE XREF: sub_7E1160+1DD↑j
                 push    esi
                 push    0
-                call    AddXenonEffect_Hook ; AddXenonEffect(AcidEffect *,Attrib::Collection const *,UMath::Matrix4 const *,UMath::Vector4 const *,float)
+                call    AddXenonEffect ; AddXenonEffect(AcidEffect *,Attrib::Collection const *,UMath::Matrix4 const *,UMath::Vector4 const *,float)
                 mov     esi, [ebp+8]
                 add     esp, 14h
 
@@ -2751,7 +2767,7 @@ void InitConfig()
 {
     CIniReader inireader("");
     bDebugTexture = inireader.ReadInteger("MAIN", "DebugTexture", 0) != 0;
-    bContrails = inireader.ReadInteger("MAIN", "Contrails", 0) != 0;
+    bContrails = inireader.ReadInteger("MAIN", "Contrails", 1) != 0;
 }
 
 int Init()
