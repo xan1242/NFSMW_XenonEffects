@@ -21,8 +21,8 @@ bool bContrails = false;
 #define GLOBAL_D3DDEVICE 0x00982BDC
 #define GAMEFLOWSTATUS_ADDR 0x00925E90
 
-#define MAX_PARTICLES 2000
-#define NGEFFECT_LIST_COUNT 100
+#define MAX_PARTICLES 10000
+#define NGEFFECT_LIST_COUNT 500
 
 #define SIZEOF_NGPARTICLE 0x48
 #define PARTICLELIST_SIZE SIZEOF_NGPARTICLE * MAX_PARTICLES
@@ -83,7 +83,43 @@ unsigned int sub_4013F0 = 0x005C5E90;
 char gNGEffectList[64];
 
 
-char gParticleList[PARTICLELIST_SIZE + 4];
+struct bVector3
+{
+    float x;
+    float y;
+    float z;
+};
+
+struct NGParticle
+{
+    /* 0x0000 */ struct bVector3 initialPos;
+    /* 0x000c */ unsigned int color;
+    /* 0x0010 */ struct bVector3 vel;
+    /* 0x001c */ float gravity;
+    /* 0x0020 */ struct bVector3 impactNormal;
+    /* 0x002c */ float remainingLife;
+    /* 0x0030 */ float life;
+    /* 0x0034 */ float age;
+    /* 0x0038 */ unsigned char elasticity;
+    /* 0x0039 */ unsigned char pad[3];
+    /* 0x003c */ unsigned char flags;
+    /* 0x003d */ unsigned char rotX;
+    /* 0x003e */ unsigned char rotY;
+    /* 0x003f */ unsigned char rotZ;
+    /* 0x0040 */ unsigned char size;
+    /* 0x0041 */ unsigned char startX;
+    /* 0x0042 */ unsigned char startY;
+    /* 0x0043 */ unsigned char startZ;
+    /* 0x0044 */ unsigned char uv[4];
+}; /* size: 0x0048 */
+
+struct ParticleList
+{
+    NGParticle mParticles[MAX_PARTICLES];
+    unsigned int mNumParticles;
+}gParticleList;
+
+//char gParticleList[PARTICLELIST_SIZE + 4];
 void* off_468094 = NULL;
 bool byte_468098 = false;
 
@@ -107,6 +143,8 @@ float flt_9C5A78 = 0.033333335f;
 unsigned int randomSeed = 0xDEADBEEF;
 char* TextureName = "MAIN";
 float EmitterDeltaTime = 0.0f;
+
+char vertexbufferdata[2048];
 
 LPDIRECT3DDEVICE9 g_D3DDevice;
 
@@ -176,6 +214,16 @@ struct fuelcell_emitter_carbon
     uint8_t zDebrisType;
     uint8_t zContrail;
 }bridge_instance;
+
+class ViewTransform
+{
+public:
+    bMatrix4 m_mViewMatrix;
+    bMatrix4 m_mProjectionMatrix;
+    bMatrix4 m_mProjectionZBiasMatrix;
+    bMatrix4 m_mViewProjectionMatrix;
+    bMatrix4 m_mViewProjectionZBiasMatrix;
+};
 
 int NGSpriteManager[32];
 char NGSpriteManager_ClassData[128];
@@ -654,7 +702,7 @@ void __declspec(naked) AddXenonEffect() // (AcidEffect *piggyback_fx, Attrib::Co
                 mov     eax, edx
                 shr     eax, 1Fh
                 add     eax, edx
-                cmp     eax, 64h ; 'd'
+                cmp     eax, NGEFFECT_LIST_COUNT ; 'd'
                 jnb     loc_754DA5
                 push    esi
                 mov     ecx, 10h
@@ -1889,6 +1937,11 @@ loc_74A36E:
 
 uint32_t vertex_buffer = 0;
 
+void __stdcall CopyVertexData()
+{
+    memcpy(vertexbufferdata, *(void**)vertex_buffer, 2048);
+}
+
 void __declspec(naked) XSpriteManager_AddParticle()
 {
     _asm
@@ -2083,6 +2136,7 @@ void __declspec(naked) XSpriteManager_AddParticle()
 
         loc_74EE0B:; CODE XREF : XSpriteManager::AddParticle(eView*, NGParticle const*, uint) + 23F↑j
         ; XSpriteManager::AddParticle(eView*, NGParticle const*, uint) + 245↑j
+            call CopyVertexData
         mov     eax, [ebp + 0]
         mov     ecx, [eax]
         push    eax
@@ -2350,7 +2404,7 @@ void __stdcall ReleaseRenderObj()
     (*sm).index_buffer->Release();
 }
 
-void __stdcall XSpriteManager_DrawBatch(/*int unk*/)
+void __stdcall XSpriteManager_DrawBatch(void* eView)
 {
     //uint32_t SpriteMgrBuffer = (uint32_t)NGSpriteManager_ClassData;
     //uint32_t vert_count = *(uint32_t*)(SpriteMgrBuffer + 0x10);
@@ -2363,6 +2417,21 @@ void __stdcall XSpriteManager_DrawBatch(/*int unk*/)
     // init shader stuff here...
 
     //printf("vert_count: %d\nparticle_count: %d\n", (*sm).vert_count, *(uint32_t*)(&gParticleList[PARTICLELIST_SIZE]));
+
+    //printf("x: %.2f\ty: %.2f\tz: %.2f\n", gParticleList.mParticles[0].vel.x, gParticleList.mParticles[0].vel.y, gParticleList.mParticles[0].vel.z);
+
+    //printf("x: %hhd\ty: %hhd\tz: %hhd\n", gParticleList.mParticles[0].startX, gParticleList.mParticles[0].startY, gParticleList.mParticles[0].startZ);
+
+    //printf("vertex_buffer: 0x%X\ndata: 0x%X\n", vertex_buffer, vertexbufferdata);
+    //memcpy(vertexbufferdata, *(void**)vertex_buffer, 2048);
+
+    //printf("eView: 0x%X\n", eView);
+
+
+
+    //printf("flt_9C77C8: 0x%X\n", &flt_9C77C8);
+
+    
 
     if ((*sm).vert_count)
     {
@@ -2381,6 +2450,7 @@ void __stdcall XSpriteManager_DrawBatch(/*int unk*/)
 
         g_D3DDevice->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_SRCALPHA);
         g_D3DDevice->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_ONE);
+        //g_D3DDevice->SetTransform()
 
         g_D3DDevice->DrawIndexedPrimitive(D3DPT_TRIANGLELIST, 0, 0, 4 * (*sm).vert_count, 0, 2 * (*sm).vert_count);
     }
@@ -2397,7 +2467,7 @@ void __stdcall EmitterSystem_Render_Hook(void* eView)
     if (*(uint32_t*)GAMEFLOWSTATUS_ADDR == 6)
     {
         DrawXenonEmitters(eView);
-        XSpriteManager_DrawBatch();
+        XSpriteManager_DrawBatch(eView);
     }
     //printf("VertexBuffer: 0x%X\n", vertex_buffer);
 }
@@ -2488,6 +2558,27 @@ void AddXenonEffect_Hook(void* piggyback_fx, void* spec, bMatrix4* mat, bVector4
     //printf("x: %.2f\ty: %.2f\tz: %.2f\tw: %.2f\n", (*vel).x, (*vel).y, (*vel).z, (*vel).w);
     
     bVector4 newvel = {-40.6f, 29.3f, -2.3f, 0.0f};
+    bMatrix4 newmat;
+
+    newmat.v0.x = 0.60f;
+    newmat.v0.y = 0.80f;
+    newmat.v0.z = -0.03f;
+    newmat.v0.w = 0.00f;
+
+    newmat.v1.x = -0.80f;
+    newmat.v1.y = 0.60f;
+    newmat.v1.z = 0.01f;
+    newmat.v1.w = 0.00f;
+
+    newmat.v2.x = 0.03f;
+    newmat.v2.y = 0.02f;
+    newmat.v2.z = 1.00f;
+    newmat.v2.w = 0.00f;
+
+    newmat.v3.x = 981.90f;
+    newmat.v3.y = 2148.45f;
+    newmat.v3.z = 153.05f;
+    newmat.v3.w = 1.00f;
 
     //printf("\
 //x0: %.2f\ty0: %.2f\tz0: %.2f\tw0: %.2f\n\
@@ -2499,7 +2590,7 @@ void AddXenonEffect_Hook(void* piggyback_fx, void* spec, bMatrix4* mat, bVector4
 //(*mat).v2.x, (*mat).v2.y, (*mat).v2.z, (*mat).v2.w, 
 //(*mat).v3.x, (*mat).v3.y, (*mat).v3.z, (*mat).v3.w);
 
-    AddXenonEffect_Abstract(piggyback_fx, spec, mat, &newvel, intensity);
+    AddXenonEffect_Abstract(piggyback_fx, spec, &newmat, &newvel, 0.375);
 }
 
 // entry point: 0x750F48
@@ -2520,9 +2611,9 @@ void __declspec(naked) CarRenderConn_OnRender_Cave()
 {
     _asm
     {
-                mov     al, [edi+400h]
-                test    al, al
-                jz      loc_7E13A5
+                //mov     al, [edi+400h]
+                //test    al, al
+                //jz      loc_7E13A5
                 test    ebx, ebx
                 jz      loc_7E140C
                 mov     eax, [esi+8]
@@ -2604,7 +2695,7 @@ loc_7E1346:                             ; CODE XREF: sub_7E1160+169↑j
 loc_7E1397:                             ; CODE XREF: sub_7E1160+1DD↑j
                 push    esi
                 push    0
-                call    AddXenonEffect ; AddXenonEffect(AcidEffect *,Attrib::Collection const *,UMath::Matrix4 const *,UMath::Vector4 const *,float)
+                call    AddXenonEffect_Hook ; AddXenonEffect(AcidEffect *,Attrib::Collection const *,UMath::Matrix4 const *,UMath::Vector4 const *,float)
                 mov     esi, [ebp+8]
                 add     esp, 14h
 
