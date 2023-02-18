@@ -50,6 +50,7 @@ void* (__cdecl* FastMem_CoreAlloc)(uint32_t size, char* debug_line) = (void* (__
 void(__stdcall* sub_739600)() = (void(__stdcall*)())0x739600;
 void(__thiscall* CarRenderConn_UpdateEngineAnimation)(void* CarRenderConn, float param1, void* PktCarService) = (void(__thiscall*)(void*, float, void*))0x00745F20;
 void(__stdcall* sub_6CFCE0)() = (void(__stdcall*)())0x6CFCE0;
+void(__stdcall* ParticleSetTransform)(D3DXMATRIX* worldmatrix, uint32_t EVIEW_ID) = (void(__stdcall*)(D3DXMATRIX*, uint32_t))0x6C8000;
 
 void InitTex();
 
@@ -2369,8 +2370,8 @@ struct SpriteManager
 
 struct eViewPlatInfo
 {
-    D3DXMATRIX ViewMatrix;
-    D3DXMATRIX ProjectionMatrix;
+    D3DXMATRIX m_mViewMatrix;
+    D3DXMATRIX m_mProjectionMatrix;
     D3DXMATRIX m_mProjectionZBiasMatrix;
     D3DXMATRIX m_mViewProjectionMatrix;
     D3DXMATRIX m_mViewProjectionZBiasMatrix;
@@ -2379,6 +2380,7 @@ struct eViewPlatInfo
 struct eView
 {
     eViewPlatInfo* PlatInfo;
+    uint32_t EVIEW_ID;
 };
 
 
@@ -2419,6 +2421,39 @@ void __stdcall ReleaseRenderObj()
     (*sm).index_buffer->Release();
 }
 
+D3DXMATRIX testmatrix;
+
+void __declspec(naked) BeginParticleShaderPass()
+{
+    _asm
+    {
+        push ecx
+        mov ecx, ds:0x00982C80
+        mov eax, [ecx+0x48]
+        mov edx, [eax]
+        push 0
+        push eax
+        call dword ptr [edx+0x100]
+        pop ecx
+        retn
+    }
+}
+
+void __declspec(naked) EndParticleShaderPass()
+{
+    _asm
+    {
+        push ecx
+        mov ecx, ds:0x00982C80
+        mov eax, [ecx + 0x48]
+        mov edx, [eax]
+        push eax
+        call dword ptr[edx + 0x108]
+        pop ecx
+        retn
+    }
+}
+
 void __stdcall XSpriteManager_DrawBatch(eView* view)
 {
     //uint32_t SpriteMgrBuffer = (uint32_t)NGSpriteManager_ClassData;
@@ -2440,12 +2475,21 @@ void __stdcall XSpriteManager_DrawBatch(eView* view)
     //printf("vertex_buffer: 0x%X\ndata: 0x%X\n", vertex_buffer, vertexbufferdata);
     //memcpy(vertexbufferdata, *(void**)vertex_buffer, 2048);
 
-    //printf("eView: 0x%X\n", eView);
+    //printf("eView: 0x%X\n", view);
 
 
     //printf("flt_9C77C8: 0x%X\n", &flt_9C77C8);
 
-    
+
+
+    ParticleSetTransform((D3DXMATRIX*)0x00987AB0, view->EVIEW_ID);
+    BeginParticleShaderPass();
+
+    //g_D3DDevice->SetTransform(D3DTS_VIEW, &view->PlatInfo->m_mViewMatrix);
+    //g_D3DDevice->SetTransform(D3DTS_PROJECTION, &view->PlatInfo->m_mProjectionMatrix);
+    //g_D3DDevice->SetTransform(D3DTS_WORLDMATRIX(0), (D3DXMATRIX*)0x00987AB0);
+    //D3DXMatrixMultiply(&testmatrix, &view->PlatInfo->m_mViewMatrix, (D3DXMATRIX*)0x00987AB0);
+    //g_D3DDevice->SetTransform((D3DTRANSFORMSTATETYPE)256, &testmatrix);
 
     if ((*sm).vert_count)
     {
@@ -2461,15 +2505,12 @@ void __stdcall XSpriteManager_DrawBatch(eView* view)
 
         // this is a temporary hack until the real texture is loaded into memory
         g_D3DDevice->SetTexture(0, texMain);
-
-        g_D3DDevice->SetTransform(D3DTS_VIEW, &view->PlatInfo->ViewMatrix);
-        g_D3DDevice->SetTransform(D3DTS_PROJECTION, &view->PlatInfo->ProjectionMatrix);
-
         g_D3DDevice->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_SRCALPHA);
         g_D3DDevice->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_ONE);
 
         g_D3DDevice->DrawIndexedPrimitive(D3DPT_TRIANGLELIST, 0, 0, 4 * (*sm).vert_count, 0, 2 * (*sm).vert_count);
     }
+    EndParticleShaderPass();
 
     g_D3DDevice->SetRenderState(D3DRS_ZWRITEENABLE, TRUE);
 }
