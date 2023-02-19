@@ -6,8 +6,11 @@
 // - particles stay in the world after restart - MAKE A XENON EFFECT RESET
 // - particles are affected by shadows
 // - contrails get overwritten by sparks 
-// - FPS scaling for particle spawning
+// - intensity scaling for contrails is broken
 // - Reconfigurable limits
+// - hookbacks for call hooks
+// - reconfigurable texture
+// - loading via TextureInfo?
 //
 
 #include "stdafx.h"
@@ -24,9 +27,24 @@
 
 bool bDebugTexture = false;
 bool bContrails = true;
+bool bLimitContrailRate = true;
+bool bLimitSparkRate = true;
+bool bNISContrails = false;
+uint32_t ContrailTargetFPS = 30;
+uint32_t SparkTargetFPS = 30;
+float ContrailSpeed = 44.0f;
+
+uint32_t ContrailFrameDelay = 1;
+uint32_t SparkFrameDelay = 1;
 
 #define GLOBAL_D3DDEVICE 0x00982BDC
 #define GAMEFLOWSTATUS_ADDR 0x00925E90
+#define FASTMEM_ADDR 0x00925B30
+#define NISINSTANCE_ADDR 0x009885C8
+
+#define FRAMECOUNTER_ADDR 0x00982B78
+#define eFrameCounter *(uint32_t*)FRAMECOUNTER_ADDR
+
 
 #define MAX_PARTICLES 10000
 #define NGEFFECT_LIST_COUNT 500
@@ -90,7 +108,6 @@ unsigned int sub_4013F0 = 0x005C5E90;
 
 char gNGEffectList[64];
 
-
 struct bVector3
 {
     float x;
@@ -149,10 +166,8 @@ float flt_9EEEC8 = 0.050000001f;
 float flt_9EEBF0 = 0.000001f;
 float flt_9C5A78 = 0.033333335f;
 unsigned int randomSeed = 0xDEADBEEF;
-char* TextureName = "MAIN";
+const char* TextureName = "MAIN";
 float EmitterDeltaTime = 0.0f;
-
-char vertexbufferdata[2048];
 
 LPDIRECT3DDEVICE9 g_D3DDevice;
 
@@ -197,7 +212,6 @@ struct fuelcell_emitter_mw
     uint8_t zContrail;
 };
 
-
 struct fuelcell_emitter_carbon
 {
     bVector4 VolumeCenter;
@@ -236,8 +250,10 @@ public:
 int NGSpriteManager[32];
 char NGSpriteManager_ClassData[128];
 
-#define FASTMEM_ADDR 0x00925B30
-
+float GetTargetFrametime()
+{
+    return **(float**)0x6612EC;
+}
 
 uint32_t bridge_oldaddr = 0;
 uint32_t bridge_instance_addr = 0;
@@ -1943,13 +1959,6 @@ loc_74A36E:
     }
 }
 
-uint32_t vertex_buffer = 0;
-
-void __stdcall CopyVertexData()
-{
-    memcpy(vertexbufferdata, *(void**)vertex_buffer, 2048);
-}
-
 void __declspec(naked) XSpriteManager_AddParticle()
 {
     _asm
@@ -1963,7 +1972,6 @@ void __declspec(naked) XSpriteManager_AddParticle()
         push    2000h // Flags D3DLOCK_DISCARD
         lea     ecx, [esi + 1Ch]
         push    ecx // **ppbData
-        mov vertex_buffer, ecx
         mov     bl, 1
         mov[ebp + 4], bl
         mov     ecx, [esi + 0Ch]
@@ -2144,7 +2152,6 @@ void __declspec(naked) XSpriteManager_AddParticle()
 
         loc_74EE0B:; CODE XREF : XSpriteManager::AddParticle(eView*, NGParticle const*, uint) + 23F↑j
         ; XSpriteManager::AddParticle(eView*, NGParticle const*, uint) + 245↑j
-            //call CopyVertexData
         mov     eax, [ebp + 0]
         mov     ecx, [eax]
         push    eax
@@ -2539,6 +2546,39 @@ void __stdcall sub_6CFCE0_hook()
 
 // RENDERER STUFF END
 
+uint32_t SparkFC = 0;
+void AddXenonEffect_Spark_Hook(void* piggyback_fx, void* spec, bMatrix4* mat, bVector4* vel, float intensity)
+{
+    if (!bLimitSparkRate)
+        return AddXenonEffect_Abstract(piggyback_fx, spec, mat, vel, intensity);
+
+    if ((SparkFC + SparkFrameDelay) <= eFrameCounter)
+    {
+        if (SparkFC != eFrameCounter)
+        {
+            SparkFC = eFrameCounter;
+            AddXenonEffect_Abstract(piggyback_fx, spec, mat, vel, intensity);
+        }
+    }
+}
+
+uint32_t ContrailFC = 0;
+void AddXenonEffect_Contrail_Hook(void* piggyback_fx, void* spec, bMatrix4* mat, bVector4* vel, float intensity)
+{
+    if (!bLimitContrailRate)
+        return AddXenonEffect_Abstract(piggyback_fx, spec, mat, vel, intensity);
+
+    if ((ContrailFC + ContrailFrameDelay) <= eFrameCounter)
+    {
+        if (ContrailFC != eFrameCounter)
+        {
+            ContrailFC = eFrameCounter;
+            AddXenonEffect_Abstract(piggyback_fx, spec, mat, vel, intensity);
+        }
+    }
+}
+
+
 void __stdcall EmitterSystem_Update_Hook(float dt)
 {
     uint32_t that;
@@ -2589,7 +2629,7 @@ void __declspec(naked) Emitter_SpawnParticles_Cave()
         push    eax
         mov     eax, [edi+8Ch]
         push    eax
-        call    AddXenonEffect
+        call    AddXenonEffect_Spark_Hook
         add     esp, 14h
 
     loc_D9D6F:
@@ -2609,46 +2649,6 @@ void __declspec(naked) Emitter_SpawnParticles_Cave()
         mov esi, RescueESI
         retn 8
     }
-}
-
-void AddXenonEffect_Hook(void* piggyback_fx, void* spec, bMatrix4* mat, bVector4* vel, float intensity)
-{
-    //printf("x: %.2f\ty: %.2f\tz: %.2f\tw: %.2f\n", (*vel).x, (*vel).y, (*vel).z, (*vel).w);
-    
-    bVector4 newvel = {-40.6f, 29.3f, -2.3f, 0.0f};
-    bMatrix4 newmat;
-
-    newmat.v0.x = 0.60f;
-    newmat.v0.y = 0.80f;
-    newmat.v0.z = -0.03f;
-    newmat.v0.w = 0.00f;
-
-    newmat.v1.x = -0.80f;
-    newmat.v1.y = 0.60f;
-    newmat.v1.z = 0.01f;
-    newmat.v1.w = 0.00f;
-
-    newmat.v2.x = 0.03f;
-    newmat.v2.y = 0.02f;
-    newmat.v2.z = 1.00f;
-    newmat.v2.w = 0.00f;
-
-    newmat.v3.x = 981.90f;
-    newmat.v3.y = 2148.45f;
-    newmat.v3.z = 153.05f;
-    newmat.v3.w = 1.00f;
-
-    //printf("\
-//x0: %.2f\ty0: %.2f\tz0: %.2f\tw0: %.2f\n\
-//x1: %.2f\ty1: %.2f\tz1: %.2f\tw1: %.2f\n\
-//x2: %.2f\ty2: %.2f\tz2: %.2f\tw2: %.2f\n\
-//x3: %.2f\ty3: %.2f\tz3: %.2f\tw3: %.2f\n",
-//(*mat).v0.x, (*mat).v0.y, (*mat).v0.z, (*mat).v0.w,
-//(*mat).v1.x, (*mat).v1.y, (*mat).v1.z, (*mat).v1.w, 
-//(*mat).v2.x, (*mat).v2.y, (*mat).v2.z, (*mat).v2.w, 
-//(*mat).v3.x, (*mat).v3.y, (*mat).v3.z, (*mat).v3.w);
-
-    AddXenonEffect_Abstract(piggyback_fx, spec, &newmat, &newvel, 0.375);
 }
 
 // entry point: 0x750F48
@@ -2753,7 +2753,7 @@ loc_7E1346:                             ; CODE XREF: sub_7E1160+169↑j
 loc_7E1397:                             ; CODE XREF: sub_7E1160+1DD↑j
                 push    esi
                 push    0
-                call    AddXenonEffect ; AddXenonEffect(AcidEffect *,Attrib::Collection const *,UMath::Matrix4 const *,UMath::Vector4 const *,float)
+                call    AddXenonEffect_Contrail_Hook ; AddXenonEffect(AcidEffect *,Attrib::Collection const *,UMath::Matrix4 const *,UMath::Vector4 const *,float)
                 mov     esi, [ebp+8]
                 add     esp, 14h
 
@@ -2777,8 +2777,10 @@ void __stdcall CarRenderConn_UpdateContrails(void* CarRenderConn, void* PktCarSe
 
     *((bool*)CarRenderConn + 0x400) = (*((bool*)PktCarService + 0x71)
         || (v3 = (float*)*((uint32_t*)CarRenderConn + 0xE),
-            sqrt(*v3 * *v3 + v3[1] * v3[1] + v3[2] * v3[2]) >= 44.0))
-        && !*(uint32_t*)0x009885C8;
+            sqrt(*v3 * *v3 + v3[1] * v3[1] + v3[2] * v3[2]) >= ContrailSpeed));
+
+    if (*(uint32_t*)NISINSTANCE_ADDR && !bNISContrails)
+        *((bool*)CarRenderConn + 0x400) = false;
 
     if (*(bool*)((uint32_t)(CarRenderConn)+0x400))
         *(float*)((uint32_t)(CarRenderConn) + 0x404) = *(float*)((uint32_t)(PktCarService)+0x6C);
@@ -2810,6 +2812,21 @@ void InitConfig()
     CIniReader inireader("");
     bDebugTexture = inireader.ReadInteger("MAIN", "DebugTexture", 0) != 0;
     bContrails = inireader.ReadInteger("MAIN", "Contrails", 1) != 0;
+    bNISContrails = inireader.ReadInteger("MAIN", "NISContrails", 0) != 0;
+    ContrailSpeed = inireader.ReadFloat("MAIN", "ContrailSpeed", 44.0f);
+    bLimitContrailRate = inireader.ReadInteger("MAIN", "LimitContrailRate", 1) != 0;
+    bLimitSparkRate = inireader.ReadInteger("MAIN", "LimitSparkRate", 1) != 0;
+
+    ContrailTargetFPS = inireader.ReadInteger("Limits", "ContrailTargetFPS", 30);
+    SparkTargetFPS = inireader.ReadInteger("Limits", "SparkTargetFPS", 30);
+
+    static float fGameTargetFPS = 1.0f / GetTargetFrametime();
+
+    static float fContrailFrameDelay = (fGameTargetFPS / (float)ContrailTargetFPS);
+    ContrailFrameDelay = (uint32_t)round(fContrailFrameDelay);
+
+    static float fSparkFrameDelay = (fGameTargetFPS / (float)SparkTargetFPS);
+    SparkFrameDelay = (uint32_t)round(fSparkFrameDelay);
 }
 
 int Init()
