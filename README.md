@@ -24,15 +24,13 @@ This feature was famously not included in the PC version of NFS Most Wanted and 
 
 ## What doesn't work
 
-- Contrail transformation - they do not get transformed correctly, causing them to randomly appear below the car under certain camera angles
-
 - ~~Debug camera crashes the game while the contrail hook is enabled~~ ExOpts was the culprit and will be patched in the latest build!
 
 - Proper texture loading from TextureInfo - currently the texture is loaded outside
 
 - Particle bouncing seems broken (maybe it's an unused parameter in MW)
 
-- General game instability after playing for a while
+- Check the top of `dllmain.cpp` for more up-to-date info
 
 ## Usage
 
