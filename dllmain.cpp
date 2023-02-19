@@ -2,6 +2,14 @@
 // A port of the XenonEffect particle effect emitters from NFS Carbon
 // by Xan/Tenjoin
 
+// BUG LIST:
+// - particles stay in the world after restart - MAKE A XENON EFFECT RESET
+// - particles are affected by shadows
+// - contrails get overwritten by sparks 
+// - FPS scaling for particle spawning
+// - Reconfigurable limits
+//
+
 #include "stdafx.h"
 #include "stdio.h"
 #include <windows.h>
@@ -2439,6 +2447,21 @@ void __declspec(naked) BeginParticleShaderPass()
     }
 }
 
+void __declspec(naked) ParticleShaderCommitChanges()
+{
+    _asm
+    {
+        push ecx
+        mov ecx, ds:0x00982C80
+        mov eax, [ecx + 0x48]
+        mov edx, [eax]
+        push eax
+        call dword ptr[edx + 0x104]
+        pop ecx
+        retn
+    }
+}
+
 void __declspec(naked) EndParticleShaderPass()
 {
     _asm
@@ -2456,42 +2479,14 @@ void __declspec(naked) EndParticleShaderPass()
 
 void __stdcall XSpriteManager_DrawBatch(eView* view)
 {
-    //uint32_t SpriteMgrBuffer = (uint32_t)NGSpriteManager_ClassData;
-    //uint32_t vert_count = *(uint32_t*)(SpriteMgrBuffer + 0x10);
-
     SpriteManager* sm = (SpriteManager*)NGSpriteManager_ClassData;
-
-    g_D3DDevice->SetRenderState(D3DRS_ZWRITEENABLE, FALSE);
-
-
     // init shader stuff here...
-
-    //printf("vert_count: %d\nparticle_count: %d\n", (*sm).vert_count, *(uint32_t*)(&gParticleList[PARTICLELIST_SIZE]));
-
-    //printf("x: %.2f\ty: %.2f\tz: %.2f\n", gParticleList.mParticles[0].vel.x, gParticleList.mParticles[0].vel.y, gParticleList.mParticles[0].vel.z);
-
-    //printf("x: %hhd\ty: %hhd\tz: %hhd\n", gParticleList.mParticles[0].startX, gParticleList.mParticles[0].startY, gParticleList.mParticles[0].startZ);
-
-    //printf("vertex_buffer: 0x%X\ndata: 0x%X\n", vertex_buffer, vertexbufferdata);
-    //memcpy(vertexbufferdata, *(void**)vertex_buffer, 2048);
-
-    //printf("eView: 0x%X\n", view);
-
-
-    //printf("flt_9C77C8: 0x%X\n", &flt_9C77C8);
-
-
 
     ParticleSetTransform((D3DXMATRIX*)0x00987AB0, view->EVIEW_ID);
     BeginParticleShaderPass();
 
-    //g_D3DDevice->SetTransform(D3DTS_VIEW, &view->PlatInfo->m_mViewMatrix);
-    //g_D3DDevice->SetTransform(D3DTS_PROJECTION, &view->PlatInfo->m_mProjectionMatrix);
-    //g_D3DDevice->SetTransform(D3DTS_WORLDMATRIX(0), (D3DXMATRIX*)0x00987AB0);
-    //D3DXMatrixMultiply(&testmatrix, &view->PlatInfo->m_mViewMatrix, (D3DXMATRIX*)0x00987AB0);
-    //g_D3DDevice->SetTransform((D3DTRANSFORMSTATETYPE)256, &testmatrix);
-
-    if ((*sm).vert_count)
+    g_D3DDevice->SetRenderState(D3DRS_ZWRITEENABLE, FALSE);
+    if ((*sm).vert_count && gParticleList.mNumParticles)
     {
         //g_D3DDevice->SetFVF((D3DFVF_XYZRHW | D3DFVF_DIFFUSE)); -- don't touch FVF
         //uint32_t pStreamData = *(uint32_t*)(SpriteMgrBuffer);
@@ -2499,20 +2494,26 @@ void __stdcall XSpriteManager_DrawBatch(eView* view)
         g_D3DDevice->SetIndices((*sm).index_buffer);
         // then shader stuff again... check SpriteMgrBuffer + 0x14 like in NFSC 0x00749BBB
 
-        //printf("pStreamData = 0x%X\n", (*sm).vertex_buffer);
-        //printf("pIndexData = 0x%X\n", (*sm).index_buffer);
-        //printf("vert_count = 0x%X\n", (*sm).vert_count);
-
         // this is a temporary hack until the real texture is loaded into memory
         g_D3DDevice->SetTexture(0, texMain);
+        g_D3DDevice->SetRenderState(D3DRS_ALPHAREF, (DWORD)0x000000B0);
+        g_D3DDevice->SetRenderState(D3DRS_ALPHATESTENABLE, FALSE);
+        g_D3DDevice->SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
+        g_D3DDevice->SetRenderState(D3DRS_ALPHAFUNC, D3DCMP_GREATER);
         g_D3DDevice->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_SRCALPHA);
         g_D3DDevice->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_ONE);
+        // g_D3DDevice->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_INVSRCALPHA); -- Carbon does it wrong
+        g_D3DDevice->SetRenderState(D3DRS_COLORWRITEENABLE, D3DCOLORWRITEENABLE_RED | D3DCOLORWRITEENABLE_GREEN | D3DCOLORWRITEENABLE_BLUE);
+
+        g_D3DDevice->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
+
+        ParticleShaderCommitChanges();
 
         g_D3DDevice->DrawIndexedPrimitive(D3DPT_TRIANGLELIST, 0, 0, 4 * (*sm).vert_count, 0, 2 * (*sm).vert_count);
     }
-    EndParticleShaderPass();
-
     g_D3DDevice->SetRenderState(D3DRS_ZWRITEENABLE, TRUE);
+
+    EndParticleShaderPass();
 }
 
 void __stdcall EmitterSystem_Render_Hook(eView* view)
