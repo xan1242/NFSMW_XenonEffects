@@ -30,8 +30,8 @@ bool bContrails = true;
 bool bLimitContrailRate = true;
 bool bLimitSparkRate = true;
 bool bNISContrails = false;
-uint32_t ContrailTargetFPS = 30;
-uint32_t SparkTargetFPS = 30;
+float ContrailTargetFPS = 30.0f;
+float SparkTargetFPS = 30.0f;
 float ContrailSpeed = 44.0f;
 
 uint32_t ContrailFrameDelay = 1;
@@ -2817,15 +2817,15 @@ void InitConfig()
     bLimitContrailRate = inireader.ReadInteger("MAIN", "LimitContrailRate", 1) != 0;
     bLimitSparkRate = inireader.ReadInteger("MAIN", "LimitSparkRate", 1) != 0;
 
-    ContrailTargetFPS = inireader.ReadInteger("Limits", "ContrailTargetFPS", 30);
-    SparkTargetFPS = inireader.ReadInteger("Limits", "SparkTargetFPS", 30);
+    ContrailTargetFPS = inireader.ReadFloat("Limits", "ContrailTargetFPS", 30.0f);
+    SparkTargetFPS = inireader.ReadFloat("Limits", "SparkTargetFPS", 30.0f);
 
     static float fGameTargetFPS = 1.0f / GetTargetFrametime();
 
-    static float fContrailFrameDelay = (fGameTargetFPS / (float)ContrailTargetFPS);
+    static float fContrailFrameDelay = (fGameTargetFPS / ContrailTargetFPS);
     ContrailFrameDelay = (uint32_t)round(fContrailFrameDelay);
 
-    static float fSparkFrameDelay = (fGameTargetFPS / (float)SparkTargetFPS);
+    static float fSparkFrameDelay = (fGameTargetFPS / SparkTargetFPS);
     SparkFrameDelay = (uint32_t)round(fSparkFrameDelay);
 }
 
