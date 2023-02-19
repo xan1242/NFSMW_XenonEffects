@@ -11,6 +11,7 @@
 // - hookbacks for call hooks
 // - reconfigurable texture
 // - loading via TextureInfo?
+// - catch FPS dynamically for the rate limiters!
 //
 
 #include "stdafx.h"
