@@ -2,7 +2,7 @@
 
 This is an attempt to port and implement XenonEffect particle emitters to NFS Most Wanted PC version.
 
-Currently this is a very early prototype with only the spark effects partially working. It may cause instability, so use it at your own risk.
+Currently this is an early prototype. It may cause instability, so use it at your own risk.
 
 ## What are XenonEffects?
 
@@ -17,6 +17,8 @@ This feature was famously not included in the PC version of NFS Most Wanted and 
 - General rendering - implemented via DrawIndexedPrimitive
 
 - Sparks work
+
+- Contrails work
 
 - Contrail status updating in CarRenderConn
 
