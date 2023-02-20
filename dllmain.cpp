@@ -16,10 +16,12 @@
 
 #include "stdafx.h"
 #include "stdio.h"
-#include <windows.h>
-#include "..\includes\injector\injector.hpp"
-#include "..\includes\IniReader.h"
+//#include <windows.h>
+#include "includes\injector\injector.hpp"
+#include "includes\mINI\src\mini\ini.h"
+//#include "..\includes\IniReader.h"
 #include <d3d9.h>
+#include <cmath>
 #pragma comment(lib, "d3d9.lib")
 
 #include <d3dx9.h>
@@ -31,9 +33,12 @@ bool bContrails = true;
 bool bLimitContrailRate = true;
 bool bLimitSparkRate = true;
 bool bNISContrails = false;
+bool bUseCGStyle = false;
 float ContrailTargetFPS = 30.0f;
 float SparkTargetFPS = 30.0f;
 float ContrailSpeed = 44.0f;
+float ContrailMinIntensity = 0.1f;
+float ContrailMaxIntensity = 0.75f;
 
 uint32_t ContrailFrameDelay = 1;
 uint32_t SparkFrameDelay = 1;
@@ -46,12 +51,35 @@ uint32_t SparkFrameDelay = 1;
 #define FRAMECOUNTER_ADDR 0x00982B78
 #define eFrameCounter *(uint32_t*)FRAMECOUNTER_ADDR
 
-
 #define MAX_PARTICLES 10000
 #define NGEFFECT_LIST_COUNT 500
 
 #define SIZEOF_NGPARTICLE 0x48
 #define PARTICLELIST_SIZE SIZEOF_NGPARTICLE * MAX_PARTICLES
+
+
+struct bVector3
+{
+    float x;
+    float y;
+    float z;
+};
+
+struct bVector4
+{
+    float x;
+    float y;
+    float z;
+    float w;
+};
+
+struct bMatrix4
+{
+    bVector4 v0;
+    bVector4 v1;
+    bVector4 v2;
+    bVector4 v3;
+};
 
 void*(__thiscall* FastMem_Alloc)(void* FastMem, unsigned int bytes, char* kind) = (void*(__thiscall*)(void*, unsigned int, char*))0x005D29D0;
 void* (__thiscall* FastMem_Free)(void* FastMem, void* ptr, unsigned int bytes, char* kind) = (void* (__thiscall*)(void*, void*, unsigned int, char*))0x005D0370;
@@ -78,6 +106,7 @@ void(__stdcall* sub_739600)() = (void(__stdcall*)())0x739600;
 void(__thiscall* CarRenderConn_UpdateEngineAnimation)(void* CarRenderConn, float param1, void* PktCarService) = (void(__thiscall*)(void*, float, void*))0x00745F20;
 void(__stdcall* sub_6CFCE0)() = (void(__stdcall*)())0x6CFCE0;
 void(__stdcall* ParticleSetTransform)(D3DXMATRIX* worldmatrix, uint32_t EVIEW_ID) = (void(__stdcall*)(D3DXMATRIX*, uint32_t))0x6C8000;
+bool(__thiscall* WCollisionMgr_CheckHitWorld)(void* WCollisionMgr, bMatrix4* inputSeg, void* cInfo, uint32_t primMask) = (bool(__thiscall*)(void*, bMatrix4*, void*, uint32_t))0x007854B0;
 
 void InitTex();
 
@@ -100,21 +129,11 @@ uint32_t FuelcellEmitterAddr = 0;
 unsigned int __ftol2 = 0x007C4B80;
 unsigned int sub_6016B0 = 0x5C5E80;
 unsigned int sub_404A20 = 0x004048C0;
-unsigned int sub_814D70 = 0x007854B0;
 unsigned int rsqrt = 0x00410220;
 unsigned int sub_478200 = 0x466520;
 unsigned int sub_6012B0 = 0x4FA510;
-unsigned int sub_4010E0 = 0x00402060;
-unsigned int sub_4013F0 = 0x005C5E90;
 
 char gNGEffectList[64];
-
-struct bVector3
-{
-    float x;
-    float y;
-    float z;
-};
 
 struct NGParticle
 {
@@ -161,32 +180,11 @@ float flt_9C248C = 0.0f;
 float flt_A6C230 = 0.15000001f;
 float flt_9C2A3C = 4.0f;
 float flt_9C2888 = 0.5f;
-float flt_9EF220 = 2.5f;
-float flt_9EEFF4 = 35.0f;
-float flt_9EEEC8 = 0.050000001f;
-float flt_9EEBF0 = 0.000001f;
-float flt_9C5A78 = 0.033333335f;
 unsigned int randomSeed = 0xDEADBEEF;
 const char* TextureName = "MAIN";
 float EmitterDeltaTime = 0.0f;
 
 LPDIRECT3DDEVICE9 g_D3DDevice;
-
-struct bVector4
-{
-    float x;
-    float y;
-    float z;
-    float w;
-};
-
-struct bMatrix4
-{
-    bVector4 v0;
-    bVector4 v1;
-    bVector4 v2;
-    bVector4 v3;
-};
 
 struct fuelcell_emitter_mw
 {
@@ -870,7 +868,7 @@ void __declspec(naked) CalcCollisiontime()
         lea     ecx, [esp + 28h]
         mov     dword ptr[esp + 28h], 0
         mov     dword ptr[esp + 2Ch], 3
-        call    sub_814D70
+        call    WCollisionMgr_CheckHitWorld
         test    eax, eax
         jz      loc_73F30F
         mov     ecx, [esi + 18h]
@@ -2566,15 +2564,25 @@ void AddXenonEffect_Spark_Hook(void* piggyback_fx, void* spec, bMatrix4* mat, bV
 uint32_t ContrailFC = 0;
 void AddXenonEffect_Contrail_Hook(void* piggyback_fx, void* spec, bMatrix4* mat, bVector4* vel, float intensity)
 {
+    float newintensity = ContrailMaxIntensity;
+
+    if (!bUseCGStyle)
+    {
+        double carspeed = ((sqrt((*vel).x * (*vel).x + (*vel).y * (*vel).y + (*vel).z * (*vel).z) - ContrailSpeed)) / ContrailSpeed;
+        newintensity = std::lerp(ContrailMinIntensity, ContrailMaxIntensity, carspeed);
+        if (newintensity > ContrailMaxIntensity)
+            newintensity = ContrailMaxIntensity;
+    }
+
     if (!bLimitContrailRate)
-        return AddXenonEffect_Abstract(piggyback_fx, spec, mat, vel, intensity);
+        return AddXenonEffect_Abstract(piggyback_fx, spec, mat, vel, newintensity);
 
     if ((ContrailFC + ContrailFrameDelay) <= eFrameCounter)
     {
         if (ContrailFC != eFrameCounter)
         {
             ContrailFC = eFrameCounter;
-            AddXenonEffect_Abstract(piggyback_fx, spec, mat, vel, intensity);
+            AddXenonEffect_Abstract(piggyback_fx, spec, mat, vel, newintensity);
         }
     }
 }
@@ -2659,13 +2667,6 @@ uint32_t loc_750F4E = 0x750F4E;
 uint32_t loc_750F6D = 0x750F6D;
 uint32_t loc_750FB0 = 0x750FB0;
 
-float conn_var_68 = 0;
-float conn_var_60 = 0;
-float conn_var_5C = 0;
-float conn_var_58 = 0;
-float conn_var_8C = 0;
-float conn_var_84 = 0;
-
 void __declspec(naked) CarRenderConn_OnRender_Cave()
 {
     _asm
@@ -2677,52 +2678,9 @@ void __declspec(naked) CarRenderConn_OnRender_Cave()
                 jz      loc_7E140C
                 mov     eax, [esi+8]
                 cmp     eax, 1
-                jz      short loc_7E12A8
+                jz      short loc_7E1346
                 cmp     eax, 2
                 jnz     loc_7E13A5
-
-loc_7E12A8:                             ; CODE XREF: sub_7E1160+13D↑j
-                mov     ecx, [edi+38h]
-                push    ecx
-                call    sub_4013F0
-                fstp    conn_var_68
-                fld     dword ptr [edi+404h]
-                add     esp, 4
-                fcomp   ds:flt_9EEBF0
-                fnstsw  ax
-                test    ah, 1
-                jmp     short loc_7E1346 // jnz
-                push    0E3ABCC2Dh
-                push    6F5943F1h
-                call    Attrib_FindCollection ; Attrib::FindCollection((ulong,ulong))
-                mov     esi, eax
-                mov     eax, [edi+38h]
-                fld     dword ptr [eax+4]
-                add     esp, 8
-                fld     dword ptr [eax+8]
-                push    3F666666h       ; float
-                fld     dword ptr [eax]
-                push    3F4CCCCDh       ; float
-                fmul    ds:flt_9EF220
-                push    ecx
-                fstp    conn_var_60
-                fxch    st(1)
-                fmul    ds:flt_9EF220
-                fstp    conn_var_5C
-                fmul    ds:flt_9EF220
-                fstp    conn_var_58
-                fld     conn_var_68
-                fsub    ds:flt_9C2478
-                fmul    ds:flt_9EEEC8
-                fstp    conn_var_8C; float
-                call    sub_4010E0
-                mov     eax, [edi+34h]
-                fstp    conn_var_84
-                add     esp, 8
-                lea     edx, conn_var_60
-                push    edx
-                push    eax
-                jmp     short loc_7E1397
 ; ---------------------------------------------------------------------------
 
 loc_7E1346:                             ; CODE XREF: sub_7E1160+169↑j
@@ -2734,20 +2692,11 @@ loc_7E1346:                             ; CODE XREF: sub_7E1160+169↑j
                 push    16AFDE7Bh
                 push    6F5943F1h
                 call    Attrib_FindCollection ; Attrib::FindCollection((ulong,ulong))
-                fld     conn_var_68
-                fsub    ds:flt_9EEFF4
                 add     esp, 8
                 push    3F400000h       ; float
-                push    3DCCCCCDh       ; float
-                fmul    ds:flt_9C5A78
-                push    ecx
                 mov     esi, eax
-                fstp    conn_var_8C; float
-                call    sub_4010E0
                 mov     eax, [edi+38h]
-                fstp    conn_var_84
                 mov     ecx, [edi+34h]
-                add     esp, 8
                 push    eax
                 push    ecx
 
@@ -2774,11 +2723,16 @@ loc_7E140C:
 
 void __stdcall CarRenderConn_UpdateContrails(void* CarRenderConn, void* PktCarService, float param)
 {
-    float* v3;
+    float* v3 = (float*)*((uint32_t*)CarRenderConn + 0xE);
+    float v4 = sqrt(*v3 * *v3 + v3[1] * v3[1] + v3[2] * v3[2]);
 
-    *((bool*)CarRenderConn + 0x400) = (*((bool*)PktCarService + 0x71)
-        || (v3 = (float*)*((uint32_t*)CarRenderConn + 0xE),
-            sqrt(*v3 * *v3 + v3[1] * v3[1] + v3[2] * v3[2]) >= ContrailSpeed));
+    *((bool*)CarRenderConn + 0x400) = (
+        (v3 = (float*)*((uint32_t*)CarRenderConn + 0xE),
+        sqrt(*v3 * *v3 + v3[1] * v3[1] + v3[2] * v3[2]) >= ContrailSpeed)
+        );
+
+    if (*((bool*)PktCarService + 0x71) && bUseCGStyle)
+        *((bool*)CarRenderConn + 0x400) = true;
 
     if (*(uint32_t*)NISINSTANCE_ADDR && !bNISContrails)
         *((bool*)CarRenderConn + 0x400) = false;
@@ -2787,9 +2741,6 @@ void __stdcall CarRenderConn_UpdateContrails(void* CarRenderConn, void* PktCarSe
         *(float*)((uint32_t)(CarRenderConn) + 0x404) = *(float*)((uint32_t)(PktCarService)+0x6C);
     else
         *(float*)((uint32_t)(CarRenderConn)+0x404) = 0;
-
-    //printf("ConTrail: %d\n", *(bool*)((int)CarRenderConn + 0x3F4));
-
 }
 
 void __stdcall CarRenderConn_UpdateEngineAnimation_Hook(float param, void* PktCarService)
@@ -2810,16 +2761,40 @@ void __stdcall CarRenderConn_UpdateEngineAnimation_Hook(float param, void* PktCa
 
 void InitConfig()
 {
-    CIniReader inireader("");
-    bDebugTexture = inireader.ReadInteger("MAIN", "DebugTexture", 0) != 0;
-    bContrails = inireader.ReadInteger("MAIN", "Contrails", 1) != 0;
-    bNISContrails = inireader.ReadInteger("MAIN", "NISContrails", 0) != 0;
-    ContrailSpeed = inireader.ReadFloat("MAIN", "ContrailSpeed", 44.0f);
-    bLimitContrailRate = inireader.ReadInteger("MAIN", "LimitContrailRate", 1) != 0;
-    bLimitSparkRate = inireader.ReadInteger("MAIN", "LimitSparkRate", 1) != 0;
+    mINI::INIFile inifile("NFSMW_XenonEffects.ini");
+    mINI::INIStructure ini;
+    inifile.read(ini);
 
-    ContrailTargetFPS = inireader.ReadFloat("Limits", "ContrailTargetFPS", 30.0f);
-    SparkTargetFPS = inireader.ReadFloat("Limits", "SparkTargetFPS", 30.0f);
+    if (ini.has("MAIN"))
+    {
+        if (ini["MAIN"].has("DebugTexture"))
+            bDebugTexture = std::stol(ini["MAIN"]["DebugTexture"]) != 0;
+        if (ini["MAIN"].has("Contrails"))
+            bContrails = std::stol(ini["MAIN"]["Contrails"]) != 0;
+        if (ini["MAIN"].has("UseCGStyle"))
+            bUseCGStyle = std::stol(ini["MAIN"]["UseCGStyle"]) != 0;
+        if (ini["MAIN"].has("NISContrails"))
+            bNISContrails = std::stol(ini["MAIN"]["NISContrails"]) != 0;
+        if (ini["MAIN"].has("ContrailSpeed"))
+            ContrailSpeed = std::stof(ini["MAIN"]["ContrailSpeed"]);
+        if (ini["MAIN"].has("LimitContrailRate"))
+            bLimitContrailRate = std::stol(ini["MAIN"]["LimitContrailRate"]) != 0;
+        if (ini["MAIN"].has("LimitSparkRate"))
+            bLimitSparkRate = std::stol(ini["MAIN"]["LimitSparkRate"]) != 0;
+    }
+
+    if (ini.has("Limits"))
+    {
+        if (ini["Limits"].has("ContrailTargetFPS"))
+            ContrailTargetFPS = std::stof(ini["Limits"]["ContrailTargetFPS"]);
+        if (ini["Limits"].has("SparkTargetFPS"))
+            SparkTargetFPS = std::stof(ini["Limits"]["SparkTargetFPS"]);
+        if (ini["Limits"].has("ContrailMinIntensity"))
+            ContrailMinIntensity = std::stof(ini["Limits"]["ContrailMinIntensity"]);
+        if (ini["Limits"].has("ContrailMaxIntensity"))
+            ContrailMaxIntensity = std::stof(ini["Limits"]["ContrailMaxIntensity"]);
+    }
+
 
     static float fGameTargetFPS = 1.0f / GetTargetFrametime();
 
