@@ -4,22 +4,19 @@
 
 // BUG LIST:
 // - particles stay in the world after restart - MAKE A XENON EFFECT RESET
-// - particles are affected by shadows
 // - contrails get overwritten by sparks 
-// - intensity scaling for contrails is broken
 // - Reconfigurable limits
 // - hookbacks for call hooks
 // - reconfigurable texture
 // - loading via TextureInfo?
 // - catch FPS dynamically for the rate limiters!
+// - particle collision & bouncing
 //
 
 #include "stdafx.h"
 #include "stdio.h"
-//#include <windows.h>
 #include "includes\injector\injector.hpp"
 #include "includes\mINI\src\mini\ini.h"
-//#include "..\includes\IniReader.h"
 #include <d3d9.h>
 #include <cmath>
 #pragma comment(lib, "d3d9.lib")
@@ -34,6 +31,7 @@ bool bLimitContrailRate = true;
 bool bLimitSparkRate = true;
 bool bNISContrails = false;
 bool bUseCGStyle = false;
+bool bPassShadowMap = false;
 float ContrailTargetFPS = 30.0f;
 float SparkTargetFPS = 30.0f;
 float ContrailSpeed = 44.0f;
@@ -47,6 +45,8 @@ uint32_t SparkFrameDelay = 1;
 #define GAMEFLOWSTATUS_ADDR 0x00925E90
 #define FASTMEM_ADDR 0x00925B30
 #define NISINSTANCE_ADDR 0x009885C8
+#define WORLDPRELITSHADER_OBJ_ADDR 0x0093DEBC
+#define CURRENTSHADER_OBJ_ADDR 0x00982C80
 
 #define FRAMECOUNTER_ADDR 0x00982B78
 #define eFrameCounter *(uint32_t*)FRAMECOUNTER_ADDR
@@ -105,7 +105,7 @@ void* (__cdecl* FastMem_CoreAlloc)(uint32_t size, char* debug_line) = (void* (__
 void(__stdcall* sub_739600)() = (void(__stdcall*)())0x739600;
 void(__thiscall* CarRenderConn_UpdateEngineAnimation)(void* CarRenderConn, float param1, void* PktCarService) = (void(__thiscall*)(void*, float, void*))0x00745F20;
 void(__stdcall* sub_6CFCE0)() = (void(__stdcall*)())0x6CFCE0;
-void(__stdcall* ParticleSetTransform)(D3DXMATRIX* worldmatrix, uint32_t EVIEW_ID) = (void(__stdcall*)(D3DXMATRIX*, uint32_t))0x6C8000;
+void(__cdecl* ParticleSetTransform)(D3DXMATRIX* worldmatrix, uint32_t EVIEW_ID) = (void(__cdecl*)(D3DXMATRIX*, uint32_t))0x6C8000;
 bool(__thiscall* WCollisionMgr_CheckHitWorld)(void* WCollisionMgr, bMatrix4* inputSeg, void* cInfo, uint32_t primMask) = (bool(__thiscall*)(void*, bMatrix4*, void*, uint32_t))0x007854B0;
 
 void InitTex();
@@ -2435,61 +2435,18 @@ void __stdcall ReleaseRenderObj()
     (*sm).index_buffer->Release();
 }
 
-D3DXMATRIX testmatrix;
-
-void __declspec(naked) BeginParticleShaderPass()
-{
-    _asm
-    {
-        push ecx
-        mov ecx, ds:0x00982C80
-        mov eax, [ecx+0x48]
-        mov edx, [eax]
-        push 0
-        push eax
-        call dword ptr [edx+0x100]
-        pop ecx
-        retn
-    }
-}
-
-void __declspec(naked) ParticleShaderCommitChanges()
-{
-    _asm
-    {
-        push ecx
-        mov ecx, ds:0x00982C80
-        mov eax, [ecx + 0x48]
-        mov edx, [eax]
-        push eax
-        call dword ptr[edx + 0x104]
-        pop ecx
-        retn
-    }
-}
-
-void __declspec(naked) EndParticleShaderPass()
-{
-    _asm
-    {
-        push ecx
-        mov ecx, ds:0x00982C80
-        mov eax, [ecx + 0x48]
-        mov edx, [eax]
-        push eax
-        call dword ptr[edx + 0x108]
-        pop ecx
-        retn
-    }
-}
-
 void __stdcall XSpriteManager_DrawBatch(eView* view)
 {
     SpriteManager* sm = (SpriteManager*)NGSpriteManager_ClassData;
     // init shader stuff here...
+    uint32_t CurrentShaderObj = WORLDPRELITSHADER_OBJ_ADDR;
+    if (bPassShadowMap)
+        CurrentShaderObj = CURRENTSHADER_OBJ_ADDR;
+    LPD3DXEFFECT effect = *(LPD3DXEFFECT*)(*(uint32_t*)CurrentShaderObj + 0x48);
 
+    effect->Begin(NULL, 0);
     ParticleSetTransform((D3DXMATRIX*)0x00987AB0, view->EVIEW_ID);
-    BeginParticleShaderPass();
+    effect->BeginPass(0);
 
     g_D3DDevice->SetRenderState(D3DRS_ZWRITEENABLE, FALSE);
     if ((*sm).vert_count && gParticleList.mNumParticles)
@@ -2513,13 +2470,14 @@ void __stdcall XSpriteManager_DrawBatch(eView* view)
 
         g_D3DDevice->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
 
-        ParticleShaderCommitChanges();
+        effect->CommitChanges();
 
         g_D3DDevice->DrawIndexedPrimitive(D3DPT_TRIANGLELIST, 0, 0, 4 * (*sm).vert_count, 0, 2 * (*sm).vert_count);
     }
     g_D3DDevice->SetRenderState(D3DRS_ZWRITEENABLE, TRUE);
 
-    EndParticleShaderPass();
+    effect->EndPass();
+    effect->End();
 }
 
 void __stdcall EmitterSystem_Render_Hook(eView* view)
@@ -2775,6 +2733,8 @@ void InitConfig()
             bUseCGStyle = std::stol(ini["MAIN"]["UseCGStyle"]) != 0;
         if (ini["MAIN"].has("NISContrails"))
             bNISContrails = std::stol(ini["MAIN"]["NISContrails"]) != 0;
+        if (ini["MAIN"].has("PassShadowMap"))
+            bPassShadowMap = std::stol(ini["MAIN"]["PassShadowMap"]) != 0;
         if (ini["MAIN"].has("ContrailSpeed"))
             ContrailSpeed = std::stof(ini["MAIN"]["ContrailSpeed"]);
         if (ini["MAIN"].has("LimitContrailRate"))
