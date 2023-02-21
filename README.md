@@ -26,9 +26,7 @@ This feature was famously not included in the PC version of NFS Most Wanted and 
 
 ## What doesn't work
 
-- ~~Debug camera crashes the game while the contrail hook is enabled~~ ExOpts was the culprit and will be patched in the latest build!
-
-- 
+- ~~Debug camera crashes the game while the contrail hook is enabled~~ ExOpts was the culprit and was patched in the latest build! Make sure you update!
 
 - Particle bouncing seems broken (maybe it's an unused parameter in MW)
 
