@@ -34,6 +34,7 @@ float SparkTargetFPS = 60.0f;
 float ContrailSpeed = 44.0f;
 float ContrailMinIntensity = 0.1f;
 float ContrailMaxIntensity = 0.75f;
+char TPKfilename[128] = { "GLOBAL\\XenonEffects.tpk" };
 
 uint32_t ContrailFrameDelay = 1;
 uint32_t SparkFrameDelay = 1;
@@ -177,7 +178,6 @@ float flt_9C2888 = 0.5f;
 unsigned int randomSeed = 0xDEADBEEF;
 const char* TextureName = "MAIN";
 float EmitterDeltaTime = 0.0f;
-char TPKfilename[128] = {"GLOBAL\\XenonEffects.tpk"};
 
 LPDIRECT3DDEVICE9 g_D3DDevice;
 
