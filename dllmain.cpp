@@ -6,7 +6,6 @@
 // - particles stay in the world after restart - MAKE A XENON EFFECT RESET
 // - contrails get overwritten by sparks 
 // - Reconfigurable limits
-// - hookbacks for call hooks
 // - catch FPS dynamically for the rate limiters!
 // - particle collision & bouncing
 //
@@ -2391,6 +2390,7 @@ void __stdcall sub_6CFCE0_hook()
 bool InitXenonEffects()
 {
     LoadResourceFile(TPKfilename, 0, 0, NULL, 0, 0, 0);
+    XenonEffectList_Initialize();
     InitializeRenderObj();
     return false;
 }
@@ -2702,7 +2702,7 @@ int Init()
     // delta time stealer
     injector::MakeCALL(0x0050D43C, EmitterSystem_Update_Hook, true);
 
-    // temp. injection point in LoadGlobalChunks()
+    // injection point in LoadGlobalChunks()
     injector::MakeCALL(0x006648BC, InitXenonEffects, true);
 
     // render objects release
@@ -2727,10 +2727,6 @@ int Init()
         injector::WriteMemory<uint32_t>(0x0075E6FC, 0x408, true);
         injector::WriteMemory<uint32_t>(0x0075E766, 0x408, true);
     }
-
-    // constructor for the NGEffectList
-    //injector::MakeCALL(0x006D1DA3, bStringHash_Hook1, true);
-    injector::MakeCALL(0x0066616E, sub_739600_hook, true);
 
     //freopen("CON", "w", stdout);
     //freopen("CON", "w", stderr);
