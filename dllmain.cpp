@@ -107,6 +107,13 @@ void(__stdcall* sub_6CFCE0)() = (void(__stdcall*)())0x6CFCE0;
 void(__cdecl* ParticleSetTransform)(D3DXMATRIX* worldmatrix, uint32_t EVIEW_ID) = (void(__cdecl*)(D3DXMATRIX*, uint32_t))0x6C8000;
 bool(__thiscall* WCollisionMgr_CheckHitWorld)(void* WCollisionMgr, bMatrix4* inputSeg, void* cInfo, uint32_t primMask) = (bool(__thiscall*)(void*, bMatrix4*, void*, uint32_t))0x007854B0;
 void(__cdecl* GameSetTexture)(void* TextureInfo, uint32_t unk) = (void(__cdecl*)(void*, uint32_t))0x006C68B0;
+void* (*CreateResourceFile)(char* filename, int ResFileType, int unk1, int unk2, int unk3) = (void* (*)(char*, int, int, int, int))0x0065FD30;
+void(__thiscall* ResourceFile_BeginLoading)(void* ResourceFile, void* callback, void* unk) = (void(__thiscall*)(void*, void*, void*))0x006616F0;
+
+void __stdcall LoadResourceFile(char* filename, int ResType, int unk1, void* unk2, void* unk3, int unk4, int unk5)
+{
+    ResourceFile_BeginLoading(CreateResourceFile(filename, ResType, unk1, unk4, unk5), unk2, unk3);
+}
 
 // bridge the difference between MW and Carbon
 void* __stdcall Attrib_Instance(void* collection, uint32_t msgPort)
@@ -172,6 +179,7 @@ float flt_9C2888 = 0.5f;
 unsigned int randomSeed = 0xDEADBEEF;
 const char* TextureName = "MAIN";
 float EmitterDeltaTime = 0.0f;
+char TPKfilename[128] = {"GLOBAL\\XenonEffects.tpk"};
 
 LPDIRECT3DDEVICE9 g_D3DDevice;
 
@@ -2381,6 +2389,13 @@ void __stdcall sub_6CFCE0_hook()
 
 // RENDERER STUFF END
 
+bool InitXenonEffects()
+{
+    LoadResourceFile(TPKfilename, 0, 0, NULL, 0, 0, 0);
+    InitializeRenderObj();
+    return false;
+}
+
 uint32_t SparkFC = 0;
 void AddXenonEffect_Spark_Hook(void* piggyback_fx, void* spec, bMatrix4* mat, bVector4* vel, float intensity)
 {
@@ -2643,6 +2658,8 @@ void InitConfig()
 
     if (ini.has("MAIN"))
     {
+        if (ini["MAIN"].has("TexturePack"))
+            strcpy_s(TPKfilename, ini["MAIN"]["TexturePack"].c_str());
         if (ini["MAIN"].has("Contrails"))
             bContrails = std::stol(ini["MAIN"]["Contrails"]) != 0;
         if (ini["MAIN"].has("UseCGStyle"))
@@ -2687,7 +2704,7 @@ int Init()
     injector::MakeCALL(0x0050D43C, EmitterSystem_Update_Hook, true);
 
     // temp. injection point in LoadGlobalChunks()
-    injector::MakeCALL(0x006648BC, InitializeRenderObj, true);
+    injector::MakeCALL(0x006648BC, InitXenonEffects, true);
 
     // render objects release
     injector::MakeCALL(0x006BD622, ReleaseRenderObj, true);
