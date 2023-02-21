@@ -7,7 +7,6 @@
 // - contrails get overwritten by sparks 
 // - Reconfigurable limits
 // - hookbacks for call hooks
-// - reconfigurable texture -- feature enhancement?
 // - catch FPS dynamically for the rate limiters!
 // - particle collision & bouncing
 //
