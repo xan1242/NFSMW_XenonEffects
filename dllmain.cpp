@@ -25,6 +25,8 @@
 #pragma comment(lib, "d3dx9.lib")
 #pragma runtime_checks( "", off )
 
+//#define CONTRAIL_TEST
+
 bool bDebugTexture = false;
 bool bContrails = true;
 bool bLimitContrailRate = true;
@@ -2522,6 +2524,45 @@ void AddXenonEffect_Spark_Hook(void* piggyback_fx, void* spec, bMatrix4* mat, bV
 uint32_t ContrailFC = 0;
 void AddXenonEffect_Contrail_Hook(void* piggyback_fx, void* spec, bMatrix4* mat, bVector4* vel, float intensity)
 {
+#ifdef CONTRAIL_TEST
+    // TEST CODE
+    bVector4 newvel = { -40.6f, 29.3f, -2.3f, 0.0f };
+    bMatrix4 newmat;
+
+    newmat.v0.x = 0.60f;
+    newmat.v0.y = 0.80f;
+    newmat.v0.z = -0.03f;
+    newmat.v0.w = 0.00f;
+
+    newmat.v1.x = -0.80f;
+    newmat.v1.y = 0.60f;
+    newmat.v1.z = 0.01f;
+    newmat.v1.w = 0.00f;
+
+    newmat.v2.x = 0.03f;
+    newmat.v2.y = 0.02f;
+    newmat.v2.z = 1.00f;
+    newmat.v2.w = 0.00f;
+
+    newmat.v3.x = 981.90f;
+    newmat.v3.y = 2148.45f;
+    newmat.v3.z = 153.05f;
+    newmat.v3.w = 1.00f;
+
+    if (!bLimitContrailRate)
+        AddXenonEffect_Abstract(piggyback_fx, spec, &newmat, &newvel, 1.0f);
+
+    if ((ContrailFC + ContrailFrameDelay) <= eFrameCounter)
+    {
+        if (ContrailFC != eFrameCounter)
+        {
+            ContrailFC = eFrameCounter;
+            AddXenonEffect_Abstract(piggyback_fx, spec, &newmat, &newvel, 1.0f);
+        }
+    }
+    // TEST CODE
+#else
+
     float newintensity = ContrailMaxIntensity;
 
     if (!bUseCGStyle)
@@ -2543,6 +2584,7 @@ void AddXenonEffect_Contrail_Hook(void* piggyback_fx, void* spec, bMatrix4* mat,
             AddXenonEffect_Abstract(piggyback_fx, spec, mat, vel, newintensity);
         }
     }
+#endif
 }
 
 
@@ -2629,9 +2671,11 @@ void __declspec(naked) CarRenderConn_OnRender_Cave()
 {
     _asm
     {
+#ifndef CONTRAIL_TEST
                 mov     al, [edi+400h]
                 test    al, al
                 jz      loc_7E13A5
+#endif
                 test    ebx, ebx
                 jz      loc_7E140C
                 mov     eax, [esi+8]
