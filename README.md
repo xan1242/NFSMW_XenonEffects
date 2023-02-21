@@ -28,7 +28,7 @@ This feature was famously not included in the PC version of NFS Most Wanted and 
 
 - ~~Debug camera crashes the game while the contrail hook is enabled~~ ExOpts was the culprit and will be patched in the latest build!
 
-- Proper texture loading from TextureInfo - currently the texture is loaded outside
+- 
 
 - Particle bouncing seems broken (maybe it's an unused parameter in MW)
 
