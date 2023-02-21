@@ -3,10 +3,9 @@
 // by Xan/Tenjoin
 
 // BUG LIST:
-// - particles stay in the world after restart - MAKE A XENON EFFECT RESET
-// - contrails get overwritten by sparks 
-// - Reconfigurable limits
 // - particle collision & bouncing
+// - particles stay in the world after restart - MAKE A XENON EFFECT RESET
+// - contrails get overwritten by sparks at high rates
 //
 
 #include "stdafx.h"
@@ -20,6 +19,7 @@
 
 #pragma runtime_checks( "", off )
 
+// uncomment to enable contrail test near the SkipFE start location in MW's map (next to car lot in College/Rosewood)
 //#define CONTRAIL_TEST
 
 bool bContrails = true;
@@ -33,7 +33,10 @@ float SparkTargetFPS = 60.0f;
 float ContrailSpeed = 44.0f;
 float ContrailMinIntensity = 0.1f;
 float ContrailMaxIntensity = 0.75f;
+float SparkIntensity = 1.0f;
 char TPKfilename[128] = { "GLOBAL\\XenonEffects.tpk" };
+uint32_t MaxParticles = 10000;
+uint32_t NGEffectListSize = 500;
 
 uint32_t ContrailFrameDelay = 1;
 uint32_t SparkFrameDelay = 1;
@@ -47,13 +50,6 @@ uint32_t SparkFrameDelay = 1;
 
 #define FRAMECOUNTER_ADDR 0x00982B78
 #define eFrameCounter *(uint32_t*)FRAMECOUNTER_ADDR
-
-#define MAX_PARTICLES 10000
-#define NGEFFECT_LIST_COUNT 500
-
-#define SIZEOF_NGPARTICLE 0x48
-#define PARTICLELIST_SIZE SIZEOF_NGPARTICLE * MAX_PARTICLES
-
 
 struct bVector3
 {
@@ -156,13 +152,16 @@ struct NGParticle
     unsigned char uv[4];
 };
 
-struct ParticleList
-{
-    NGParticle mParticles[MAX_PARTICLES];
-    unsigned int mNumParticles;
-}gParticleList;
+//struct ParticleList
+//{
+//    NGParticle mParticles[MAX_PARTICLES];
+//    unsigned int mNumParticles;
+//}gParticleList;
 
-#define numParticles dword ptr gParticleList[PARTICLELIST_SIZE]
+NGParticle* gParticleList;
+uint32_t NumParticles = 0;
+
+//#define numParticles dword ptr gParticleList[PARTICLELIST_SIZE]
 
 float flt_9C92F0 = 255.0f;
 float flt_9C2478 = 1.0f;
@@ -662,7 +661,7 @@ void(__thiscall* eastl_vector_erase_XenonEffectDef_Abstract)(void* vector, void*
 
 void __stdcall XenonEffectList_Initialize()
 {
-    eastl_vector_reserve_XenonEffectDef_Abstract(&gNGEffectList, NGEFFECT_LIST_COUNT);
+    eastl_vector_reserve_XenonEffectDef_Abstract(&gNGEffectList, NGEffectListSize);
     //eastl_vector_erase_XenonEffectDef_Abstract(&gNGEffectList, gNGEffectList, (void*)((uint32_t)(gNGEffectList + 4)));
 }
 
@@ -694,7 +693,7 @@ void __declspec(naked) AddXenonEffect() // (AcidEffect *piggyback_fx, Attrib::Co
                 mov     eax, edx
                 shr     eax, 1Fh
                 add     eax, edx
-                cmp     eax, NGEFFECT_LIST_COUNT ; 'd'
+                cmp     eax, NGEffectListSize; 'd'
                 jnb     loc_754DA5
                 push    esi
                 mov     ecx, 10h
@@ -1026,8 +1025,8 @@ void __declspec(naked) ParticleList_AgeParticles()
                 push    ebx
                 push    ebp
                 mov     ebp, ecx
-                mov     ecx, [ebp+PARTICLELIST_SIZE]
-                lea     edx, [ebp+PARTICLELIST_SIZE]
+                mov     ecx, NumParticles
+                lea     edx, NumParticles
                 xor     eax, eax
                 cmp     ecx, eax
                 mov     ebx, ebp
@@ -1300,16 +1299,17 @@ loc_73F50C:                             ; CODE XREF: CGEmitter::SpawnParticles(f
 
 loc_73F540:                             ; CODE XREF: CGEmitter::SpawnParticles(float,float)+5ED↓j
                 fld     dword ptr [esp+20h]
-                mov     eax, numParticles
-                cmp     eax, MAX_PARTICLES
+                mov     eax, NumParticles
+                cmp     eax, MaxParticles
                 fsub    ds:flt_9C2478
                 fstp    dword ptr [esp+20h]
                 jnb     loc_73F913
                 lea     esi, [eax+eax*8]
-                lea     esi, gParticleList[esi*8] ; ParticleList gParticleList
+                mov ecx, gParticleList
+                lea     esi, [ecx+esi*8] ; ParticleList gParticleList
                 inc     eax
                 test    esi, esi
-                mov     numParticles, eax
+                mov     NumParticles, eax
                 jz      loc_73F913
                 mov     eax, [ebp+4]
                 mov     ecx, [eax+84h]
@@ -2103,7 +2103,7 @@ void __declspec(naked) DrawXenonEmitters(void* eView)
         mov     ecx, eax
         push    edi
         push    ecx; float
-        mov     ecx, offset gParticleList
+        mov     ecx, gParticleList
         mov[esp + 10h], eax
         mov     EmitterDeltaTime, 0
         call    ParticleList_AgeParticles
@@ -2148,12 +2148,12 @@ void __declspec(naked) DrawXenonEmitters(void* eView)
         push    eax
         mov     ecx, offset gNGEffectList
         call    eastl_vector_erase_XenonEffectDef
-        mov     eax, numParticles
+        mov     eax, NumParticles
         test    eax, eax
         jz      loc_754CA6
         mov     ecx, [ebp + 8]
         push    eax
-        push    offset gParticleList
+        push    gParticleList
         push    ecx
         mov     ecx, offset NGSpriteManager
         call    XSpriteManager_AddParticle
@@ -2301,7 +2301,8 @@ void __declspec(naked) InitializeRenderObj()
         lea     eax, [esp]
         push    eax
         mov     ecx, offset NGSpriteManager_ClassData
-        mov     dword ptr[esp + 4], MAX_PARTICLES
+        mov eax, MaxParticles
+        mov     dword ptr[esp + 4], eax
         call    sub_743DF0
         push    0
         push    1
@@ -2343,7 +2344,7 @@ void __stdcall XSpriteManager_DrawBatch(eView* view)
     effect->BeginPass(0);
 
     g_D3DDevice->SetRenderState(D3DRS_ZWRITEENABLE, FALSE);
-    if (sm->vert_count && gParticleList.mNumParticles)
+    if (sm->vert_count && NumParticles)
     {
         g_D3DDevice->SetStreamSource(0, sm->vertex_buffer, 0, 0x18);
         g_D3DDevice->SetIndices(sm->index_buffer);
@@ -2398,14 +2399,14 @@ uint32_t SparkFC = 0;
 void AddXenonEffect_Spark_Hook(void* piggyback_fx, void* spec, bMatrix4* mat, bVector4* vel, float intensity)
 {
     if (!bLimitSparkRate)
-        return AddXenonEffect_Abstract(piggyback_fx, spec, mat, vel, intensity);
+        return AddXenonEffect_Abstract(piggyback_fx, spec, mat, vel, SparkIntensity);
 
     if ((SparkFC + SparkFrameDelay) <= eFrameCounter)
     {
         if (SparkFC != eFrameCounter)
         {
             SparkFC = eFrameCounter;
-            AddXenonEffect_Abstract(piggyback_fx, spec, mat, vel, intensity);
+            AddXenonEffect_Abstract(piggyback_fx, spec, mat, vel, SparkIntensity);
         }
     }
 }
@@ -2684,6 +2685,12 @@ void InitConfig()
             ContrailMinIntensity = std::stof(ini["Limits"]["ContrailMinIntensity"]);
         if (ini["Limits"].has("ContrailMaxIntensity"))
             ContrailMaxIntensity = std::stof(ini["Limits"]["ContrailMaxIntensity"]);
+        if (ini["Limits"].has("SparkIntensity"))
+            SparkIntensity = std::stof(ini["Limits"]["SparkIntensity"]);
+        if (ini["Limits"].has("MaxParticles"))
+            MaxParticles = std::stol(ini["Limits"]["MaxParticles"]);
+        if (ini["Limits"].has("NGEffectListSize"))
+            NGEffectListSize = std::stol(ini["Limits"]["NGEffectListSize"]);
     }
 
 
@@ -2698,6 +2705,9 @@ void InitConfig()
 
 int Init()
 {
+    // allocate for effect list
+    gParticleList = (NGParticle*)calloc(MaxParticles, sizeof(NGParticle));
+
     // delta time stealer
     injector::MakeCALL(0x0050D43C, EmitterSystem_Update_Hook, true);
 
