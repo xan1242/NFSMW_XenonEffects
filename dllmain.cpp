@@ -6,7 +6,6 @@
 // - particles stay in the world after restart - MAKE A XENON EFFECT RESET
 // - contrails get overwritten by sparks 
 // - Reconfigurable limits
-// - catch FPS dynamically for the rate limiters!
 // - particle collision & bouncing
 //
 
