@@ -238,14 +238,49 @@ struct fuelcell_emitter_carbon
     uint8_t zContrail;
 }bridge_instance;
 
-class ViewTransform
+struct OldTextureInfo
 {
-public:
-    bMatrix4 m_mViewMatrix;
-    bMatrix4 m_mProjectionMatrix;
-    bMatrix4 m_mProjectionZBiasMatrix;
-    bMatrix4 m_mViewProjectionMatrix;
-    bMatrix4 m_mViewProjectionZBiasMatrix;
+    unsigned int Unknown;
+    long Padding_990[2];
+    char DebugName[24];
+    unsigned int NameHash;
+    unsigned int ClassNameHash;
+    unsigned int Unknown2;
+    int ImagePlacement;
+    int PalettePlacement;
+    int ImageSize;
+    int PaletteSize;
+    int BaseImageSize;
+    short Width;
+    short Height;
+    char ShiftWidth;
+    char ShiftHeight;
+    unsigned char ImageCompressionType;
+    unsigned char PaletteCompressionType;
+    short NumPaletteEntries;
+    char NumMipMapLevels;
+    char TilableUV;
+    char BiasLevel;
+    char RenderingOrder;
+    char ScrollType;
+    char UsedFlag;
+    char ApplyAlphaSorting;
+    char AlphaUsageType;
+    char AlphaBlendType;
+    char Flags;
+    char MipmapBiasType;
+    char Unknown3;
+    short ScrollTimeStep;
+    short ScrollSpeedS;
+    short ScrollSpeedT;
+    short OffsetS;
+    short OffsetT;
+    short ScaleS;
+    short ScaleT;
+    class TexturePack* pTexturePack;
+    void* ImageData;
+    void* PaletteData;
+    unsigned int Unknown4[2];
 };
 
 int NGSpriteManager[32];
@@ -2441,9 +2476,9 @@ void __stdcall XSpriteManager_DrawBatch(eView* view)
 {
     SpriteManager* sm = (SpriteManager*)NGSpriteManager_ClassData;
     // init shader stuff here...
-    uint32_t CurrentShaderObj = WORLDPRELITSHADER_OBJ_ADDR;
-    if (bPassShadowMap)
-        CurrentShaderObj = CURRENTSHADER_OBJ_ADDR;
+    uint32_t CurrentShaderObj = CURRENTSHADER_OBJ_ADDR;
+    if (!bPassShadowMap)
+        *(uint32_t*)CURRENTSHADER_OBJ_ADDR = *(uint32_t*)WORLDPRELITSHADER_OBJ_ADDR;
     LPD3DXEFFECT effect = *(LPD3DXEFFECT*)(*(uint32_t*)CurrentShaderObj + 0x48);
 
     effect->Begin(NULL, 0);
