@@ -7,8 +7,7 @@
 // - contrails get overwritten by sparks 
 // - Reconfigurable limits
 // - hookbacks for call hooks
-// - reconfigurable texture
-// - loading via TextureInfo?
+// - reconfigurable texture -- feature enhancement?
 // - catch FPS dynamically for the rate limiters!
 // - particle collision & bouncing
 //
@@ -18,16 +17,14 @@
 #include "includes\injector\injector.hpp"
 #include "includes\mINI\src\mini\ini.h"
 #include <d3d9.h>
-#include <cmath>
 #pragma comment(lib, "d3d9.lib")
-
 #include <d3dx9.h>
-#pragma comment(lib, "d3dx9.lib")
+#include <cmath>
+
 #pragma runtime_checks( "", off )
 
 //#define CONTRAIL_TEST
 
-bool bDebugTexture = false;
 bool bContrails = true;
 bool bLimitContrailRate = true;
 bool bLimitSparkRate = true;
@@ -109,8 +106,7 @@ void(__thiscall* CarRenderConn_UpdateEngineAnimation)(void* CarRenderConn, float
 void(__stdcall* sub_6CFCE0)() = (void(__stdcall*)())0x6CFCE0;
 void(__cdecl* ParticleSetTransform)(D3DXMATRIX* worldmatrix, uint32_t EVIEW_ID) = (void(__cdecl*)(D3DXMATRIX*, uint32_t))0x6C8000;
 bool(__thiscall* WCollisionMgr_CheckHitWorld)(void* WCollisionMgr, bMatrix4* inputSeg, void* cInfo, uint32_t primMask) = (bool(__thiscall*)(void*, bMatrix4*, void*, uint32_t))0x007854B0;
-
-void InitTex();
+void(__cdecl* GameSetTexture)(void* TextureInfo, uint32_t unk) = (void(__cdecl*)(void*, uint32_t))0x006C68B0;
 
 // bridge the difference between MW and Carbon
 void* __stdcall Attrib_Instance(void* collection, uint32_t msgPort)
@@ -119,13 +115,8 @@ void* __stdcall Attrib_Instance(void* collection, uint32_t msgPort)
     _asm mov that, ecx
     auto result = Attrib_Instance_MW((void*)that, collection, msgPort, NULL);
 
-    // shift the data back to be compatible with carbon's struct
-    //memcpy((void*)that, (void*)(that + 4), 16);
-
     return result;
 }
-
-uint32_t FuelcellEmitterAddr = 0;
 
 // function maps from Carbon to MW
 unsigned int __ftol2 = 0x007C4B80;
@@ -139,36 +130,32 @@ char gNGEffectList[64];
 
 struct NGParticle
 {
-    /* 0x0000 */ struct bVector3 initialPos;
-    /* 0x000c */ unsigned int color;
-    /* 0x0010 */ struct bVector3 vel;
-    /* 0x001c */ float gravity;
-    /* 0x0020 */ struct bVector3 impactNormal;
-    /* 0x002c */ float remainingLife;
-    /* 0x0030 */ float life;
-    /* 0x0034 */ float age;
-    /* 0x0038 */ unsigned char elasticity;
-    /* 0x0039 */ unsigned char pad[3];
-    /* 0x003c */ unsigned char flags;
-    /* 0x003d */ unsigned char rotX;
-    /* 0x003e */ unsigned char rotY;
-    /* 0x003f */ unsigned char rotZ;
-    /* 0x0040 */ unsigned char size;
-    /* 0x0041 */ unsigned char startX;
-    /* 0x0042 */ unsigned char startY;
-    /* 0x0043 */ unsigned char startZ;
-    /* 0x0044 */ unsigned char uv[4];
-}; /* size: 0x0048 */
+    struct bVector3 initialPos;
+    unsigned int color;
+    struct bVector3 vel;
+    float gravity;
+    struct bVector3 impactNormal;
+    float remainingLife;
+    float life;
+    float age;
+    unsigned char elasticity;
+    unsigned char pad[3];
+    unsigned char flags;
+    unsigned char rotX;
+    unsigned char rotY;
+    unsigned char rotZ;
+    unsigned char size;
+    unsigned char startX;
+    unsigned char startY;
+    unsigned char startZ;
+    unsigned char uv[4];
+};
 
 struct ParticleList
 {
     NGParticle mParticles[MAX_PARTICLES];
     unsigned int mNumParticles;
 }gParticleList;
-
-//char gParticleList[PARTICLELIST_SIZE + 4];
-void* off_468094 = NULL;
-bool byte_468098 = false;
 
 #define numParticles dword ptr gParticleList[PARTICLELIST_SIZE]
 
@@ -238,53 +225,8 @@ struct fuelcell_emitter_carbon
     uint8_t zContrail;
 }bridge_instance;
 
-struct OldTextureInfo
-{
-    unsigned int Unknown;
-    long Padding_990[2];
-    char DebugName[24];
-    unsigned int NameHash;
-    unsigned int ClassNameHash;
-    unsigned int Unknown2;
-    int ImagePlacement;
-    int PalettePlacement;
-    int ImageSize;
-    int PaletteSize;
-    int BaseImageSize;
-    short Width;
-    short Height;
-    char ShiftWidth;
-    char ShiftHeight;
-    unsigned char ImageCompressionType;
-    unsigned char PaletteCompressionType;
-    short NumPaletteEntries;
-    char NumMipMapLevels;
-    char TilableUV;
-    char BiasLevel;
-    char RenderingOrder;
-    char ScrollType;
-    char UsedFlag;
-    char ApplyAlphaSorting;
-    char AlphaUsageType;
-    char AlphaBlendType;
-    char Flags;
-    char MipmapBiasType;
-    char Unknown3;
-    short ScrollTimeStep;
-    short ScrollSpeedS;
-    short ScrollSpeedT;
-    short OffsetS;
-    short OffsetT;
-    short ScaleS;
-    short ScaleT;
-    class TexturePack* pTexturePack;
-    void* ImageData;
-    void* PaletteData;
-    unsigned int Unknown4[2];
-};
-
-int NGSpriteManager[32];
 char NGSpriteManager_ClassData[128];
+uint32_t NGSpriteManager[32] = { (uint32_t)(&NGSpriteManager_ClassData), 0};
 
 float GetTargetFrametime()
 {
@@ -332,11 +274,6 @@ void __declspec(naked) sub_736EA0()
 {
     _asm
     {
-        //push    0FFFFFFFFh
-        //push    offset SEH_736EA0
-        //mov     eax, large fs : 0
-        //push    eax
-        //mov     large fs : 0, esp
         sub     esp, 10h
         push    esi
         push    0FE40E637h
@@ -344,16 +281,8 @@ void __declspec(naked) sub_736EA0()
         push    eax
         call    Attrib_Instance_Get ; Attrib::Instance::Get(const(ulong))
         mov     ecx, eax
-        mov     dword ptr[esp + 1Ch], 0
         call    Attrib_Attribute_GetLength ; Attrib::Attribute::GetLength(const(void))
-        lea     ecx, [esp + 4]
-        mov     esi, eax
-        mov     dword ptr[esp + 1Ch], 0FFFFFFFFh
-        //call    nullsub_3
-        //mov     ecx, [esp + 14h]
-        mov     eax, esi
         pop     esi
-        //mov     large fs : 0, ecx
         add     esp, 10h
         retn
     }
@@ -737,9 +666,7 @@ void __stdcall XenonEffectList_Initialize()
 void sub_739600_hook()
 {
     sub_739600();
-    //_asm mov ecx, offset gNGEffectList
     XenonEffectList_Initialize();
-    InitTex();
 }
 
 // note: unk_9D7880 == unk_8A3028
@@ -1669,12 +1596,6 @@ void __declspec(naked) Attrib_Gen_fuelcell_emitter_constructor()
 {
     _asm
     {
-                //push    0FFFFFFFFh
-                //push    offset SEH_73EEB0
-                //mov     eax, large fs:0
-                //push    eax
-                //mov     large fs:0, esp
-                //push    ecx
                 sub esp, 10h
                 mov     eax, [esp+18h]
                 push    esi
@@ -1695,10 +1616,8 @@ void __declspec(naked) Attrib_Gen_fuelcell_emitter_constructor()
                 mov     [esi+8], eax
 
 loc_73EEFD:                             ; CODE XREF: Attrib::Gen::fuelcell_emitter::fuelcell_emitter(Attrib::Collection const *,uint)+3B↑j
-                //mov     ecx, [esp+8]
                 mov     eax, esi
                 pop     esi
-                //mov     large fs:0, ecx
                 add     esp, 10h
                 retn    8
     }
@@ -1724,12 +1643,6 @@ void __declspec(naked) sub_737610()
 {
     _asm
     {
-                //push    0FFFFFFFFh
-                //push    offset SEH_737610
-               // mov     eax, large fs:0
-                //push    eax
-                //mov     large fs:0, esp
-                //push    ecx
                 sub esp, 10h
                 mov     eax, [esp+18h]
                 push    esi
@@ -1751,10 +1664,8 @@ void __declspec(naked) sub_737610()
                 mov     [esi+8], eax
 
 loc_73765A:                             ; CODE XREF: sub_737610+3B↑j
-                //mov     ecx, [esp+8]
                 mov     eax, esi
                 pop     esi
-                //mov     large fs:0, ecx
                 add     esp, 10h
                 retn    8
     }
@@ -1780,12 +1691,6 @@ void __declspec(naked) CGEmitter_CGEmitter()
 {
     _asm
     {
-                 //push    0FFFFFFFFh
-                 //push    offset SEH_73F0B0
-                 //mov     eax, large fs:0
-                 //push    eax
-                 //mov     large fs:0, esp
-                 //push    ecx
                  sub esp, 10h
                  mov     eax, [esp+14h]
                  push    ebx
@@ -1817,13 +1722,11 @@ void __declspec(naked) CGEmitter_CGEmitter()
                  mov     ecx, [eax+8]
                  mov     [edx+8], ecx
                  mov     eax, [eax+0Ch]
-                 //mov     ecx, [esp+10h]
                  pop     edi
                  mov     [edx+0Ch], eax
                  pop     esi
                  mov     eax, ebx
                  pop     ebx
-                 //mov     large fs:0, ecx
                  add     esp, 10h
                  retn    8
     }
@@ -1843,8 +1746,6 @@ void __stdcall Attrib_Gen_fuelcell_effect_constructor(void* collection, unsigned
 
     memcpy((void*)that, (void*)(&fuelcell_attrib_buffer3[4]), 16);
 
-    //Attrib_Instance_MW((void*)that, collection, msgPort, NULL);
-
     if (!*(uint32_t*)(that + 4))
         *(uint32_t*)(that + 4) = (uint32_t)Attrib_DefaultDataArea(1);
 }
@@ -1857,15 +1758,12 @@ unsigned int __stdcall Attrib_Gen_fuelcell_effect_Num_NGEmitter()
     uint32_t v1; // eax
     uint32_t v2; // esi
     char v4[16]; // [esp+4h] [ebp-1Ch] BYREF
-    //int v5; // [esp+1Ch] [ebp-4h]
 
     memset(fuelcell_attrib_buffer3, 0, 20);
     memcpy(&(fuelcell_attrib_buffer3[4]), (void*)that, 16);
 
     v1 = (uint32_t)Attrib_Instance_Get(fuelcell_attrib_buffer3, (unsigned int)v4, 0xB0D98A89);
-    //v5 = 0;
     v2 = (uint32_t)Attrib_Attribute_GetLength((void*)v1);
-    //v5 = -1;
 
     return v2;
 }
@@ -1889,11 +1787,6 @@ void __declspec(naked) NGEffect_NGEffect()
 {
     _asm
     {
-                //push    0FFFFFFFFh
-                //push    offset SEH_74A260
-                //mov     eax, large fs:0
-                //push    eax
-                //mov     large fs:0, esp
                 sub     esp, 84h
                 push    ebp
                 push    edi
@@ -1920,7 +1813,6 @@ loc_74A2C0:                             ; CODE XREF: NGEffect::NGEffect(XenonEff
                 push    esi
                 push    0B0D98A89h
                 mov     ecx, ebp
-                //sub ecx, 4
                 call    Attrib_Instance_GetAttributePointer_Shim
                 test    eax, eax
                 jnz     loc_74A2DB
@@ -1945,7 +1837,6 @@ loc_74A2DB:                             ; CODE XREF: NGEffect::NGEffect(XenonEff
                 mov     edx, [esp+98h]
                 push    1
                 push    ecx
-                //push    3F800000h
                 push    edx
                 jmp     loc_74A31A
 ; ---------------------------------------------------------------------------
@@ -1957,19 +1848,14 @@ loc_74A30B:                             ; CODE XREF: NGEffect::NGEffect(XenonEff
                 push    eax             ; float
 
 loc_74A31A:                             ; CODE XREF: NGEffect::NGEffect(XenonEffectDef const &,float)+A9↑j
-                //lea     ecx, [esp+20h]
-                //int 3
-                //call fuelcell_emitter_bridge
                 lea     ecx, [esp + 20h]
                 call    CGEmitter_SpawnParticles ; CGEmitter::SpawnParticles(float,float)
                 call fuelcell_emitter_bridge_restore
                 lea     ecx, [esp+24h]
                 mov     byte ptr [esp+8Ch], 2
-                //sub ecx, 4
                 call    Attrib_Instance_Dtor_Shim; Attrib::Instance::~Instance((void))
                 lea     ecx, [esp+14h]
                 mov     byte ptr [esp+8Ch], 0
-                //sub ecx, 4
                 call    Attrib_Instance_Dtor_Shim; Attrib::Instance::~Instance((void))
                 mov     eax, [esp+0Ch]
                 inc     esi
@@ -1981,11 +1867,8 @@ loc_74A352:                             ; CODE XREF: NGEffect::NGEffect(XenonEff
                 pop     esi
 
 loc_74A355:                             ; CODE XREF: NGEffect::NGEffect(XenonEffectDef const &,float)+110↓j
-                //mov     ecx, [esp+8Ch+var_C]
                 pop     edi
                 pop     ebp
-                //mov     large fs:0, ecx
-                //int 3
                 add     esp, 84h
                 
                 retn    8
@@ -2388,27 +2271,6 @@ void __declspec(naked) sub_743DF0()
     }
 }
 
-
-LPDIRECT3DTEXTURE9 texMain;
-const BYTE bPink[58] =
-{
-    0x42, 0x4D, 0x3A, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x36, 0x00, 0x00, 0x00, 0x28, 0x00, 0x00, 0x00,
-    0x01, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01,
-    0x00, 0x18, 0x00, 0x00, 0x00, 0x00, 0x00, 0x04, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x80, 0x00, 0xFF, 0x00
-};
-
-void InitTex()
-{
-    if (bDebugTexture)
-        D3DXCreateTextureFromFileInMemory(g_D3DDevice, (LPCVOID)&bPink, 58, &texMain);
-    else if (D3DXCreateTextureFromFile(g_D3DDevice, "MAIN.dds", &texMain) != D3D_OK)
-        D3DXCreateTextureFromFile(g_D3DDevice, "scripts\\MAIN.dds", &texMain);
-}
-
 struct SpriteManager
 {
     IDirect3DVertexBuffer9* vertex_buffer;
@@ -2416,24 +2278,14 @@ struct SpriteManager
     uint32_t unk1;
     uint32_t unk2;
     uint32_t vert_count;
-};
-
-
-struct eViewPlatInfo
-{
-    D3DXMATRIX m_mViewMatrix;
-    D3DXMATRIX m_mProjectionMatrix;
-    D3DXMATRIX m_mProjectionZBiasMatrix;
-    D3DXMATRIX m_mViewProjectionMatrix;
-    D3DXMATRIX m_mViewProjectionZBiasMatrix;
+    void* mTexture;
 };
 
 struct eView
 {
-    eViewPlatInfo* PlatInfo;
+    void* PlatInfo;
     uint32_t EVIEW_ID;
 };
-
 
 void __declspec(naked) InitializeRenderObj()
 {
@@ -2468,8 +2320,8 @@ void __stdcall ReleaseRenderObj()
 {
     SpriteManager* sm = (SpriteManager*)NGSpriteManager_ClassData;
 
-    (*sm).vertex_buffer->Release();
-    (*sm).index_buffer->Release();
+    sm->vertex_buffer->Release();
+    sm->index_buffer->Release();
 }
 
 void __stdcall XSpriteManager_DrawBatch(eView* view)
@@ -2486,30 +2338,19 @@ void __stdcall XSpriteManager_DrawBatch(eView* view)
     effect->BeginPass(0);
 
     g_D3DDevice->SetRenderState(D3DRS_ZWRITEENABLE, FALSE);
-    if ((*sm).vert_count && gParticleList.mNumParticles)
+    if (sm->vert_count && gParticleList.mNumParticles)
     {
-        //g_D3DDevice->SetFVF((D3DFVF_XYZRHW | D3DFVF_DIFFUSE)); -- don't touch FVF
-        //uint32_t pStreamData = *(uint32_t*)(SpriteMgrBuffer);
-        g_D3DDevice->SetStreamSource(0, (*sm).vertex_buffer, 0, 0x18);
-        g_D3DDevice->SetIndices((*sm).index_buffer);
-        // then shader stuff again... check SpriteMgrBuffer + 0x14 like in NFSC 0x00749BBB
+        g_D3DDevice->SetStreamSource(0, sm->vertex_buffer, 0, 0x18);
+        g_D3DDevice->SetIndices(sm->index_buffer);
 
-        // this is a temporary hack until the real texture is loaded into memory
-        g_D3DDevice->SetTexture(0, texMain);
-        g_D3DDevice->SetRenderState(D3DRS_ALPHAREF, (DWORD)0x000000B0);
-        g_D3DDevice->SetRenderState(D3DRS_ALPHATESTENABLE, FALSE);
-        g_D3DDevice->SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
-        g_D3DDevice->SetRenderState(D3DRS_ALPHAFUNC, D3DCMP_GREATER);
-        g_D3DDevice->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_SRCALPHA);
-        g_D3DDevice->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_ONE);
-        // g_D3DDevice->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_INVSRCALPHA); -- Carbon does it wrong
-        g_D3DDevice->SetRenderState(D3DRS_COLORWRITEENABLE, D3DCOLORWRITEENABLE_RED | D3DCOLORWRITEENABLE_GREEN | D3DCOLORWRITEENABLE_BLUE);
-
-        g_D3DDevice->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
+        if (sm->mTexture)
+        {
+            GameSetTexture(sm->mTexture, 0);
+        }
 
         effect->CommitChanges();
 
-        g_D3DDevice->DrawIndexedPrimitive(D3DPT_TRIANGLELIST, 0, 0, 4 * (*sm).vert_count, 0, 2 * (*sm).vert_count);
+        g_D3DDevice->DrawIndexedPrimitive(D3DPT_TRIANGLELIST, 0, 0, 4 * sm->vert_count, 0, 2 * sm->vert_count);
     }
     g_D3DDevice->SetRenderState(D3DRS_ZWRITEENABLE, TRUE);
 
@@ -2629,8 +2470,6 @@ void __stdcall EmitterSystem_Update_Hook(float dt)
     _asm mov that, ecx
     EmitterSystem_UpdateParticles((void*)that, dt);
     EmitterDeltaTime = dt;
-    //printf("EmitterDeltaTime = %.2f\n", EmitterDeltaTime);
-    //printf("FuelcellEmitterAddr = 0x%X\n", FuelcellEmitterAddr);
 }
 
 uint32_t RescueESI = 0;
@@ -2804,8 +2643,6 @@ void InitConfig()
 
     if (ini.has("MAIN"))
     {
-        if (ini["MAIN"].has("DebugTexture"))
-            bDebugTexture = std::stol(ini["MAIN"]["DebugTexture"]) != 0;
         if (ini["MAIN"].has("Contrails"))
             bContrails = std::stol(ini["MAIN"]["Contrails"]) != 0;
         if (ini["MAIN"].has("UseCGStyle"))
@@ -2846,8 +2683,6 @@ void InitConfig()
 
 int Init()
 {
-    NGSpriteManager[0] = (int)(&NGSpriteManager_ClassData);
-
     // delta time stealer
     injector::MakeCALL(0x0050D43C, EmitterSystem_Update_Hook, true);
 
@@ -2868,19 +2703,18 @@ int Init()
 
     // xenon effect inject at CarRenderConn::OnRender for contrails
     if (bContrails)
-      injector::MakeJMP(0x750F48, CarRenderConn_OnRender_Cave, true); // ExOpts was the cause of the Debug Cam crash due to an ancient workaround.
-
-    // update contrail inject
-    injector::MakeCALL(0x00756629, CarRenderConn_UpdateEngineAnimation_Hook, true);
+    {
+        injector::MakeJMP(0x750F48, CarRenderConn_OnRender_Cave, true); // ExOpts was the cause of the Debug Cam crash due to an ancient workaround.
+        // update contrail inject
+        injector::MakeCALL(0x00756629, CarRenderConn_UpdateEngineAnimation_Hook, true);
+        // extend CarRenderConn by 8 bytes to accommodate a float and a bool
+        injector::WriteMemory<uint32_t>(0x0075E6FC, 0x408, true);
+        injector::WriteMemory<uint32_t>(0x0075E766, 0x408, true);
+    }
 
     // constructor for the NGEffectList
-    //injector::MakeCALL(0x006D1DA3, bStringHash_Hook1, true);;
+    //injector::MakeCALL(0x006D1DA3, bStringHash_Hook1, true);
     injector::MakeCALL(0x0066616E, sub_739600_hook, true);
-
-
-    // extend CarRenderConn by 8 bytes to accommodate a float and a bool
-    injector::WriteMemory<uint32_t>(0x0075E6FC, 0x408, true);
-    injector::WriteMemory<uint32_t>(0x0075E766, 0x408, true);
 
     //freopen("CON", "w", stdout);
     //freopen("CON", "w", stderr);
