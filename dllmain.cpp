@@ -103,6 +103,8 @@ bool(__thiscall* WCollisionMgr_CheckHitWorld)(void* WCollisionMgr, bMatrix4* inp
 void(__cdecl* GameSetTexture)(void* TextureInfo, uint32_t unk) = (void(__cdecl*)(void*, uint32_t))0x006C68B0;
 void* (*CreateResourceFile)(char* filename, int ResFileType, int unk1, int unk2, int unk3) = (void* (*)(char*, int, int, int, int))0x0065FD30;
 void(__thiscall* ResourceFile_BeginLoading)(void* ResourceFile, void* callback, void* unk) = (void(__thiscall*)(void*, void*, void*))0x006616F0;
+void(*ServiceResourceLoading)() = (void(*)())0x006626B0;
+uint32_t(__stdcall* sub_6DFAF0)() = (uint32_t(__stdcall*)())0x6DFAF0;
 
 void __stdcall LoadResourceFile(char* filename, int ResType, int unk1, void* unk2, void* unk3, int unk4, int unk5)
 {
@@ -666,12 +668,6 @@ void __stdcall XenonEffectList_Initialize()
 }
 
 // EASTL List stuff End
-
-void sub_739600_hook()
-{
-    sub_739600();
-    XenonEffectList_Initialize();
-}
 
 // note: unk_9D7880 == unk_8A3028
 
@@ -2305,7 +2301,7 @@ void __declspec(naked) InitializeRenderObj()
         mov     dword ptr[esp + 4], eax
         call    sub_743DF0
         push    0
-        push    1
+        push    0
         push    TextureName
         call    bStringHash
         add     esp, 4
@@ -2326,8 +2322,10 @@ void __stdcall ReleaseRenderObj()
 {
     SpriteManager* sm = (SpriteManager*)NGSpriteManager_ClassData;
 
-    sm->vertex_buffer->Release();
-    sm->index_buffer->Release();
+    if (sm->vertex_buffer)
+        sm->vertex_buffer->Release();
+    if (sm->index_buffer)
+        sm->index_buffer->Release();
 }
 
 void __stdcall XSpriteManager_DrawBatch(eView* view)
@@ -2390,9 +2388,15 @@ void __stdcall sub_6CFCE0_hook()
 bool InitXenonEffects()
 {
     LoadResourceFile(TPKfilename, 0, 0, NULL, 0, 0, 0);
+    ServiceResourceLoading();
     XenonEffectList_Initialize();
-    InitializeRenderObj();
     return false;
+}
+
+uint32_t sub_6DFAF0_hook()
+{
+    InitializeRenderObj();
+    return sub_6DFAF0();
 }
 
 uint32_t SparkFC = 0;
@@ -2713,6 +2717,7 @@ int Init()
 
     // injection point in LoadGlobalChunks()
     injector::MakeCALL(0x006648BC, InitXenonEffects, true);
+    injector::MakeCALL(0x0066493E, sub_6DFAF0_hook, true);
 
     // render objects release
     injector::MakeCALL(0x006BD622, ReleaseRenderObj, true);
