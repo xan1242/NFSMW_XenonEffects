@@ -6,6 +6,7 @@
 // - particle collision & bouncing
 // - particles stay in the world after restart - MAKE A XENON EFFECT RESET
 // - contrails get overwritten by sparks at high rates
+// - texture filtering messes with drawing coordinates - if it's disabled, sparks are rendered off screen...
 //
 
 #include "stdafx.h"

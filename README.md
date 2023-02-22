@@ -39,3 +39,5 @@ This feature was famously not included in the PC version of NFS Most Wanted and 
 - Place MAIN.dds either in game root or the scripts folder
 
 - Reconfigure the .ini to your liking
+
+- Make sure that texture filtering is turned on in video settings! Otherwise sparks will be drawn at wrong coordinates!
