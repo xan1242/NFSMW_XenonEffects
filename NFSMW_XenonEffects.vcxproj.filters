@@ -16,10 +16,17 @@
     <None Include="post-build\postbuild-debug.bat">
       <Filter>post-build</Filter>
     </None>
+    <None Include="README.md" />
+    <None Include="Texture\TpkIniGen.bat">
+      <Filter>Texture</Filter>
+    </None>
   </ItemGroup>
   <ItemGroup>
     <Filter Include="post-build">
       <UniqueIdentifier>{f1f7d57f-e1a5-4c48-a935-05acbc512f5e}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Texture">
+      <UniqueIdentifier>{2d0a3c87-2425-4873-90e5-2ae297a3b6e4}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
 </Project>

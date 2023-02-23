@@ -114,6 +114,8 @@
     <None Include="NFSMW_XenonEffects.ini" />
     <None Include="post-build\postbuild-debug.bat" />
     <None Include="post-build\postbuild.bat" />
+    <None Include="README.md" />
+    <None Include="Texture\TpkIniGen.bat" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
