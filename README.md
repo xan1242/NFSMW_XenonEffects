@@ -1,5 +1,7 @@
 # NFS Most Wanted - XenonEffects port
 
+![XenonEffects.png](Thumbnail\XenonEffects.png)
+
 This is an attempt to port and implement XenonEffect particle emitters to NFS Most Wanted PC version.
 
 ## What are XenonEffects?
