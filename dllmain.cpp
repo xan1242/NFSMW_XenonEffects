@@ -2800,20 +2800,31 @@ void InitConfig()
     {
         ElasticityPair ep = { 0xF872A5B4, 160.0f };
         elasticityValues.push_back(ep);
+        ep = { 0x525E0A0E, 120.0f };
+        elasticityValues.push_back(ep);
     }
     else
     {
         bool bSet_emsprk_line1 = false;
+        bool bSet_emsprk_line2 = false;
 
         for (int i = 0; i < elasticityValues.size(); i++)
         {
             if (elasticityValues.at(i).emmitter_key == 0xF872A5B4)
+                bSet_emsprk_line1 = true;
+            if (elasticityValues.at(i).emmitter_key == 0x525E0A0E)
                 bSet_emsprk_line1 = true;
         }
 
         if (!bSet_emsprk_line1)
         {
             ElasticityPair ep = { 0xF872A5B4, 160.0f };
+            elasticityValues.push_back(ep);
+        }
+
+        if (!bSet_emsprk_line2)
+        {
+            ElasticityPair ep = { 0x525E0A0E, 120.0f };
             elasticityValues.push_back(ep);
         }
     }
