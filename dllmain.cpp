@@ -30,6 +30,7 @@ bool bLimitSparkRate = true;
 bool bNISContrails = false;
 bool bUseCGStyle = false;
 bool bPassShadowMap = false;
+bool bUseD3DDeviceTexture = false;
 float ContrailTargetFPS = 30.0f;
 float SparkTargetFPS = 60.0f;
 float ContrailSpeed = 44.0f;
@@ -2375,7 +2376,20 @@ void __stdcall XSpriteManager_DrawBatch(eView* view)
 
         if (sm->mTexture)
         {
-            GameSetTexture(sm->mTexture, 0);
+            if (bUseD3DDeviceTexture)
+            {
+                LPDIRECT3DTEXTURE9 texMain = *(LPDIRECT3DTEXTURE9*)(*(uint32_t*)(sm->mTexture) + 0x18);
+                g_D3DDevice->SetTexture(0, texMain);
+                g_D3DDevice->SetRenderState(D3DRS_ALPHAREF, (DWORD)0x000000B0);
+                g_D3DDevice->SetRenderState(D3DRS_ALPHATESTENABLE, FALSE);
+                g_D3DDevice->SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
+                g_D3DDevice->SetRenderState(D3DRS_ALPHAFUNC, D3DCMP_GREATER);
+                g_D3DDevice->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_SRCALPHA);
+                g_D3DDevice->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_ONE);
+                g_D3DDevice->SetRenderState(D3DRS_COLORWRITEENABLE, D3DCOLORWRITEENABLE_RED | D3DCOLORWRITEENABLE_GREEN | D3DCOLORWRITEENABLE_BLUE);
+            }
+            else
+                GameSetTexture(sm->mTexture, 0);
         }
 
         effect->CommitChanges();
@@ -2706,6 +2720,8 @@ void InitConfig()
     {
         if (ini["MAIN"].has("TexturePack"))
             strcpy_s(TPKfilename, ini["MAIN"]["TexturePack"].c_str());
+        if (ini["MAIN"].has("UseD3DDeviceTexture"))
+            bUseD3DDeviceTexture = std::stol(ini["MAIN"]["UseD3DDeviceTexture"]) != 0;
         if (ini["MAIN"].has("Contrails"))
             bContrails = std::stol(ini["MAIN"]["Contrails"]) != 0;
         if (ini["MAIN"].has("UseCGStyle"))
