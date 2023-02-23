@@ -28,7 +28,7 @@ This feature was famously not included in the PC version of NFS Most Wanted and 
 
 - ~~Debug camera crashes the game while the contrail hook is enabled~~ ExOpts was the culprit and was patched in the latest build! Make sure you update it!
 
-- FIxed pipeline rendering - this will only work via pixel shaders. You will not be able to use this with, for example, a GeForce 2.
+- Fixed pipeline rendering - this will only work via pixel shaders. You will not be able to use this with, for example, a GeForce 2.
 
 - Check the top of `dllmain.cpp` for more up-to-date info
 
