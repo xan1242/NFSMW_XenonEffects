@@ -3,7 +3,6 @@
 // by Xan/Tenjoin
 
 // BUG LIST:
-// - particle collision & bouncing
 // - particles stay in the world after restart - MAKE A XENON EFFECT RESET
 // - contrails get overwritten by sparks at high rates
 // - texture filtering messes with drawing coordinates - if it's disabled, sparks are rendered off screen...
@@ -17,6 +16,8 @@
 #pragma comment(lib, "d3d9.lib")
 #include <d3dx9.h>
 #include <cmath>
+#include <vector>
+using namespace std;
 
 #pragma runtime_checks( "", off )
 
@@ -106,6 +107,7 @@ void* (*CreateResourceFile)(char* filename, int ResFileType, int unk1, int unk2,
 void(__thiscall* ResourceFile_BeginLoading)(void* ResourceFile, void* callback, void* unk) = (void(__thiscall*)(void*, void*, void*))0x006616F0;
 void(*ServiceResourceLoading)() = (void(*)())0x006626B0;
 uint32_t(__stdcall* sub_6DFAF0)() = (uint32_t(__stdcall*)())0x6DFAF0;
+uint32_t(* Attrib_StringHash32)(const char* k) = (uint32_t(*)(const char*))0x004519D0;
 
 void __stdcall LoadResourceFile(char* filename, int ResType, int unk1, void* unk2, void* unk3, int unk4, int unk5)
 {
@@ -232,6 +234,23 @@ struct fuelcell_emitter_carbon
     uint8_t zContrail;
 }bridge_instance;
 
+struct ElasticityPair
+{
+    uint32_t emmitter_key;
+    float Elasticity;
+};
+vector<ElasticityPair> elasticityValues;
+
+float GetElasticityValue(uint32_t key)
+{
+    for (int i = 0; i < elasticityValues.size(); i++)
+    {
+        if (elasticityValues.at(i).emmitter_key == key)
+            return elasticityValues.at(i).Elasticity;
+    }
+    return 0.0f;
+}
+
 char NGSpriteManager_ClassData[128];
 uint32_t NGSpriteManager[32] = { (uint32_t)(&NGSpriteManager_ClassData), 0};
 
@@ -249,16 +268,22 @@ void __stdcall fuelcell_emitter_bridge()
     bridge_instance_addr = that;
 
     uint32_t instance_pointer = *(uint32_t*)(that + 4);
+    uint32_t key = *(uint32_t*)((*(uint32_t*)(that)) + 0x20);
+
     fuelcell_emitter_mw* mw_emitter = (fuelcell_emitter_mw*)instance_pointer;
     memset(&bridge_instance, 0, sizeof(fuelcell_emitter_carbon));
     // copy the matching data first (first 0x80 bytes)
     memcpy(&bridge_instance, mw_emitter, 0x80);
     // adapt
-    bridge_instance.LengthStart = (*mw_emitter).LengthStart;
-    bridge_instance.LengthDelta = (*mw_emitter).LengthDelta;
-    bridge_instance.LifeVariance = (*mw_emitter).LifeVariance;
-    bridge_instance.NumParticles = (*mw_emitter).NumParticles;
-    bridge_instance.zContrail = (*mw_emitter).zContrail;
+    bridge_instance.LengthStart = mw_emitter->LengthStart;
+    bridge_instance.LengthDelta = mw_emitter->LengthDelta;
+    bridge_instance.LifeVariance = mw_emitter->LifeVariance;
+    bridge_instance.NumParticles = mw_emitter->NumParticles;
+    bridge_instance.zContrail = mw_emitter->zContrail;
+    bridge_instance.Elasticity = GetElasticityValue(key);
+    
+    //printf("key: 0x%X Elasticity: %.2f\n", key, bridge_instance.Elasticity);
+
     // no idea if this is right
     //bridge_instance.zDebrisType = (*mw_emitter).unk_0xD8782949;
 
@@ -2654,6 +2679,23 @@ void __stdcall CarRenderConn_UpdateEngineAnimation_Hook(float param, void* PktCa
     }
 }
 
+bool bValidateHexString(char* str)
+{
+    for (int i = 0; i < strlen(str); i++)
+    {
+        if ((!isdigit(str[i])) &&
+            (toupper(str[i]) != 'A') &&
+            (toupper(str[i]) != 'B') &&
+            (toupper(str[i]) != 'C') &&
+            (toupper(str[i]) != 'D') &&
+            (toupper(str[i]) != 'E') &&
+            (toupper(str[i]) != 'F')
+            )
+            return false;
+    }
+    return true;
+}
+
 void InitConfig()
 {
     mINI::INIFile inifile("NFSMW_XenonEffects.ini");
@@ -2706,13 +2748,43 @@ void InitConfig()
 
     static float fSparkFrameDelay = (fGameTargetFPS / SparkTargetFPS);
     SparkFrameDelay = (uint32_t)round(fSparkFrameDelay);
+
+    // iterate through the Elasticity section
+    if (ini.has("Elasticity"))
+    {
+        char* cursor = 0;
+        char IDstr[16] = { 0 };
+        
+        auto const& section = ini["Elasticity"];
+        for (auto const& it : section)
+        {
+            ElasticityPair ep = { 0 };
+
+            strcpy_s(IDstr, it.first.c_str());
+            cursor = IDstr;
+            if ((IDstr[0] == '0') && (IDstr[1] == 'x'))
+            {
+                cursor += 2;
+                if (bValidateHexString(cursor))
+                    sscanf(cursor, "%x", &ep.emmitter_key);
+            }
+            else
+                ep.emmitter_key = Attrib_StringHash32(it.first.c_str());
+
+            ep.Elasticity = stof(it.second);
+
+            //printf("it.first: %s\nit.second: %s\nkey: 0x%X\nel: %.2f\n", it.first.c_str(), it.second.c_str(), ep.emmitter_key, ep.Elasticity);
+
+            elasticityValues.push_back(ep);
+        }
+    }
 }
 
 int Init()
 {
     // allocate for effect list
     gParticleList = (NGParticle*)calloc(MaxParticles, sizeof(NGParticle));
-
+    
     // delta time stealer
     injector::MakeCALL(0x0050D43C, EmitterSystem_Update_Hook, true);
 
