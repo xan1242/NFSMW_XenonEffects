@@ -36,6 +36,8 @@ This feature was famously not included in the PC version of NFS Most Wanted and 
 
 - If not installed already, install either [Widescreen Fix](https://github.com/ThirteenAG/WidescreenFixesPack/releases/tag/nfsmw) (recommended) or [Ultimate ASI Loader](https://github.com/ThirteenAG/Ultimate-ASI-Loader/releases) (only if you don't want Widescreen Fix)
 
+- Make sure you're running with the RELOADED No-CD 1.3 exe! (MD5: C0516B485065FABDD69579816B5DF763)
+
 - Extract the .zip to the root directory of the game
 
 - Reconfigure the .ini in the scripts folder to your liking
